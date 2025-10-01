@@ -1,5 +1,5 @@
-import { Service, PlatformAccessory, CharacteristicValue } from 'homebridge';
-import { ShomePlatform } from '../platform.js';
+import {CharacteristicValue, PlatformAccessory, Service} from 'homebridge';
+import {ShomePlatform} from '../platform.js';
 
 export class LightAccessory {
     private service: Service;
@@ -22,7 +22,13 @@ export class LightAccessory {
         this.service.setCharacteristic(this.platform.Characteristic.Name, subDevice.nickname);
 
         this.service.getCharacteristic(this.platform.Characteristic.On)
+            .onGet(this.getOn.bind(this))
             .onSet(this.setOn.bind(this));
+    }
+
+    async getOn(): Promise<CharacteristicValue> {
+        const subDevice = this.accessory.context.subDevice;
+        return subDevice.deviceStatus === 1;
     }
 
     async setOn(value: CharacteristicValue) {

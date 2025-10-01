@@ -1,18 +1,28 @@
-import { API, DynamicPlatformPlugin, Logger, PlatformAccessory, PlatformConfig, Service, Characteristic } from 'homebridge';
-import { PLATFORM_NAME, PLUGIN_NAME } from './settings.js';
-import { ShomeClient } from './shomeClient.js';
-import { LightAccessory } from './accessories/lightAccessory.js';
-import { VentilatorAccessory } from './accessories/ventilatorAccessory.js';
-import { HeaterAccessory } from './accessories/heaterAccessory.js';
-import { DoorlockAccessory } from './accessories/doorlockAccessory.js';
-import { UnknownAccessory } from './accessories/unknownAccessory.js';
-import { GasValveAccessory } from './accessories/gasValveAccessory.js';
-import { MotionSensorAccessory } from './accessories/motionSensorAccessory.js';
-import { WindowSensorAccessory } from './accessories/windowSensorAccessory.js';
-import { SosButtonAccessory } from './accessories/sosButtonAccessory.js';
+import {
+    API,
+    Characteristic,
+    DynamicPlatformPlugin,
+    Logger,
+    PlatformAccessory,
+    PlatformConfig,
+    Service
+} from 'homebridge';
+import {PLATFORM_NAME, PLUGIN_NAME} from './settings.js';
+import {ShomeClient} from './shomeClient.js';
+import {LightAccessory} from './accessories/lightAccessory.js';
+import {VentilatorAccessory} from './accessories/ventilatorAccessory.js';
+import {HeaterAccessory} from './accessories/heaterAccessory.js';
+import {DoorlockAccessory} from './accessories/doorlockAccessory.js';
+import {GasValveAccessory} from './accessories/gasValveAccessory.js';
+import {MotionSensorAccessory} from './accessories/motionSensorAccessory.js';
+import {WindowSensorAccessory} from './accessories/windowSensorAccessory.js';
+import {SosButtonAccessory} from './accessories/sosButtonAccessory.js';
 
-// deviceInfoList를 가지고 있는 장치 유형
-const MULTI_DEVICE_TYPES = ['LIGHT', 'HEATER', 'VENTILATOR'];
+// 제어 가능하며, 하위 장치 목록을 가지는 유형
+const CONTROLLABLE_MULTI_DEVICE_TYPES = ['LIGHT', 'HEATER', 'VENTILATOR'];
+// 제어는 불가능하지만, 센서로 노출할 장치 유형
+const DISPLAYABLE_SENSOR_TYPES = ['DOORLOCK', 'WIRED GAS VALVE', 'WIRED MOTION SENSOR', 'WIRED WINDOW SENSOR', 'SOS BUTTON'];
+
 
 export class ShomePlatform implements DynamicPlatformPlugin {
     public readonly Service: typeof Service;
@@ -49,26 +59,25 @@ export class ShomePlatform implements DynamicPlatformPlugin {
         const foundAccessories: PlatformAccessory[] = [];
 
         for (const device of devices) {
-            if (MULTI_DEVICE_TYPES.includes(device.thngModelTypeName)) {
+            if (CONTROLLABLE_MULTI_DEVICE_TYPES.includes(device.thngModelTypeName)) {
                 const deviceInfoList = await this.shomeClient.getDeviceInfo(device.thngId, device.thngModelTypeName);
 
                 if (deviceInfoList) {
                     for (const subDevice of deviceInfoList) {
-                        // 각 하위 장치에 대한 고유 UUID 생성
                         const uuid = this.api.hap.uuid.generate(`${device.thngId}-${subDevice.deviceId}`);
                         const accessory = this.setupAccessory(device, subDevice, uuid);
                         foundAccessories.push(accessory);
                     }
                 }
-            } else {
-                // 단일 장치 처리
+            } else if (DISPLAYABLE_SENSOR_TYPES.includes(device.thngModelTypeName)) {
                 const uuid = this.api.hap.uuid.generate(device.thngId);
                 const accessory = this.setupAccessory(device, null, uuid);
                 foundAccessories.push(accessory);
+            } else {
+                this.log.info(`Ignoring device: ${device.nickname} (Type: ${device.thngModelTypeName})`);
             }
         }
 
-        // 더 이상 존재하지 않는 액세서리 제거
         const accessoriesToRemove = this.accessories.filter(cachedAccessory =>
             !foundAccessories.some(foundAccessory => foundAccessory.UUID === cachedAccessory.UUID)
         );
@@ -79,9 +88,8 @@ export class ShomePlatform implements DynamicPlatformPlugin {
     }
 
     setupAccessory(mainDevice: any, subDevice: any | null, uuid: string): PlatformAccessory {
+        const displayName = subDevice ? subDevice.nickname : mainDevice.nickname;
         const existingAccessory = this.accessories.find(accessory => accessory.UUID === uuid);
-
-        const displayName = subDevice ? `${mainDevice.nickname} - ${subDevice.nickname}` : mainDevice.nickname;
 
         if (existingAccessory) {
             this.log.info('Restoring existing accessory from cache:', displayName);
@@ -102,7 +110,7 @@ export class ShomePlatform implements DynamicPlatformPlugin {
 
     createAccessory(accessory: PlatformAccessory) {
         const device = accessory.context.device;
-        switch(device.thngModelTypeName) {
+        switch (device.thngModelTypeName) {
             case 'LIGHT':
                 new LightAccessory(this, accessory);
                 break;
@@ -127,12 +135,7 @@ export class ShomePlatform implements DynamicPlatformPlugin {
             case 'SOS BUTTON':
                 new SosButtonAccessory(this, accessory);
                 break;
-            case 'HSP':
-                this.log.info(`Ignoring HSP device type for "${device.nickname}"`);
-                break;
-            default:
-                new UnknownAccessory(this, accessory);
-                break;
+            // HSP 및 기타 미지원 장치는 case가 없으므로 아무것도 생성하지 않음
         }
     }
 }

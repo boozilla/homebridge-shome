@@ -1,6 +1,6 @@
 import axios from 'axios';
 import CryptoJS from 'crypto-js';
-import { Logger } from 'homebridge';
+import {Logger} from 'homebridge';
 
 const BASE_URL = 'https://shome-api.samsung-ihp.com';
 const APP_REGST_ID = '6110736314d9eef6baf393f3e43a5342f9ccde6ef300d878385acd9264cf14d5';
@@ -10,6 +10,7 @@ const LANGUAGE = 'KOR';
 // 응답에서 deviceInfoList의 타입을 정의합니다.
 interface DeviceInfo {
     deviceId: string;
+
     [key: string]: any; // 다른 속성들을 포함할 수 있습니다.
 }
 
@@ -23,23 +24,8 @@ export class ShomeClient {
         private readonly username: string,
         private readonly password: string,
         private readonly deviceId: string,
-    ) {}
-
-    private sha512(input: string): string {
-        return CryptoJS.SHA512(input).toString();
+    ) {
     }
-
-    private isTokenExpired(): boolean {
-        return !this.cachedAccessToken || Date.now() >= this.tokenExpiry;
-    }
-
-    private getDateTime(): string {
-        const now = new Date();
-        const pad = (num: number) => num.toString().padStart(2, '0');
-        return `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}` +
-            `${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}`;
-    }
-
 
     async login(): Promise<string | null> {
         if (!this.isTokenExpired()) {
@@ -96,12 +82,12 @@ export class ShomeClient {
             const hashData = this.sha512(`IHRESTAPI${this.ihdId}${createDate}`);
 
             const response = await axios.get(`${BASE_URL}/v16/settings/${this.ihdId}/devices/`, {
-                params: { createDate, hashData },
-                headers: { 'Authorization': `Bearer ${token}` },
+                params: {createDate, hashData},
+                headers: {'Authorization': `Bearer ${token}`},
             });
 
             return response.data.deviceList || [];
-        } catch(error) {
+        } catch (error) {
             this.log.error(`Error getting device list: ${error}`);
             return [];
         }
@@ -119,8 +105,8 @@ export class ShomeClient {
             const typePath = type.toLowerCase().replace(/_/g, '');
 
             const response = await axios.get(`${BASE_URL}/v18/settings/${typePath}/${thingId}`, {
-                params: { createDate, hashData },
-                headers: { 'Authorization': `Bearer ${token}` },
+                params: {createDate, hashData},
+                headers: {'Authorization': `Bearer ${token}`},
             });
 
             // TODO for debug
@@ -132,7 +118,6 @@ export class ShomeClient {
             return null;
         }
     }
-
 
     async setDevice(thingId: string, deviceId: string, type: string, controlType: string, state: string): Promise<boolean> {
         const token = await this.login();
@@ -152,7 +137,7 @@ export class ShomeClient {
                     [controlType === 'WINDSPEED' ? 'mode' : 'state']: state,
                     hashData,
                 },
-                headers: { 'Authorization': `Bearer ${token}` },
+                headers: {'Authorization': `Bearer ${token}`},
             });
 
             this.log.info(`Set ${type} [${thingId}/${deviceId}] to ${state}`);
@@ -179,7 +164,7 @@ export class ShomeClient {
                     pin: '',
                     hashData,
                 },
-                headers: { 'Authorization': `Bearer ${token}` },
+                headers: {'Authorization': `Bearer ${token}`},
             });
 
             this.log.info(`Unlocked doorlock [${thingId}]`);
@@ -188,5 +173,20 @@ export class ShomeClient {
             this.log.error(`Error unlocking doorlock ${thingId}: ${error}`);
             return false;
         }
+    }
+
+    private sha512(input: string): string {
+        return CryptoJS.SHA512(input).toString();
+    }
+
+    private isTokenExpired(): boolean {
+        return !this.cachedAccessToken || Date.now() >= this.tokenExpiry;
+    }
+
+    private getDateTime(): string {
+        const now = new Date();
+        const pad = (num: number) => num.toString().padStart(2, '0');
+        return `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}` +
+            `${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}`;
     }
 }
