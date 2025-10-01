@@ -109,9 +109,6 @@ export class ShomeClient {
                 headers: {'Authorization': `Bearer ${token}`},
             });
 
-            // TODO for debug
-            this.log.info(`Device Info for ${thingId} (${type}):`, JSON.stringify(response.data, null, 2));
-
             return response.data.deviceInfoList || null;
         } catch (error) {
             this.log.error(`Error getting device info for ${thingId}: ${error}`);
