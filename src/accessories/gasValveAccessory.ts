@@ -14,26 +14,21 @@ export class GasValveAccessory {
             .setCharacteristic(this.platform.Characteristic.Model, 'Gas Valve')
             .setCharacteristic(this.platform.Characteristic.SerialNumber, device.thngId);
 
-        this.service = this.accessory.getService(this.platform.Service.Valve) ||
-            this.accessory.addService(this.platform.Service.Valve);
+        // 버그 수정: 제어 가능한 UI를 없애기 위해 OccupancySensor 서비스로 변경
+        this.service = this.accessory.getService(this.platform.Service.OccupancySensor) ||
+            this.accessory.addService(this.platform.Service.OccupancySensor);
 
         this.service.setCharacteristic(this.platform.Characteristic.Name, device.nickname);
-        this.service.setCharacteristic(this.platform.Characteristic.ValveType, this.platform.Characteristic.ValveType.GENERIC_VALVE);
 
-        this.service.getCharacteristic(this.platform.Characteristic.Active)
-            .onGet(this.getActive.bind(this));
-
-        this.service.getCharacteristic(this.platform.Characteristic.InUse)
-            .onGet(this.getInUse.bind(this));
+        this.service.getCharacteristic(this.platform.Characteristic.OccupancyDetected)
+            .onGet(this.getOccupancyState.bind(this));
     }
 
-    async getActive(): Promise<CharacteristicValue> {
+    async getOccupancyState(): Promise<CharacteristicValue> {
         const device = this.accessory.context.device;
-        return device.status ? this.platform.Characteristic.Active.ACTIVE : this.platform.Characteristic.Active.INACTIVE;
-    }
-
-    async getInUse(): Promise<CharacteristicValue> {
-        const device = this.accessory.context.device;
-        return device.status ? this.platform.Characteristic.InUse.IN_USE : this.platform.Characteristic.InUse.NOT_IN_USE;
+        // status가 true (열림) 이면 점유 감지됨으로 표시
+        return device.status
+            ? this.platform.Characteristic.OccupancyDetected.OCCUPANCY_DETECTED
+            : this.platform.Characteristic.OccupancyDetected.OCCUPANCY_NOT_DETECTED;
     }
 }

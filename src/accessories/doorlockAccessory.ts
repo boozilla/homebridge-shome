@@ -23,14 +23,15 @@ export class DoorlockAccessory {
             .onGet(this.getCurrentState.bind(this));
 
         this.service.getCharacteristic(this.platform.Characteristic.LockTargetState)
-            .onGet(this.getCurrentState.bind(this)) // 목표 상태도 현재 상태를 기반으로 표시
+            .onGet(this.getCurrentState.bind(this))
             .onSet(this.setTargetState.bind(this));
     }
 
     async getCurrentState(): Promise<CharacteristicValue> {
         const device = this.accessory.context.device;
-        // status가 0이면 잠김(SECURED), 1이면 열림(UNSECURED)
-        if (device.status === 0) {
+        // 버그 수정: status가 0이면 잠김(SECURED), 그 외(1)는 열림(UNSECURED)
+        // device.status가 boolean일 경우도 처리
+        if (device.status === 0 || device.status === false) {
             return this.platform.Characteristic.LockCurrentState.SECURED;
         } else {
             return this.platform.Characteristic.LockCurrentState.UNSECURED;
@@ -46,18 +47,15 @@ export class DoorlockAccessory {
 
             if (success) {
                 this.platform.log.info(`${device.nickname} unlocked successfully.`);
-                // API 호출 성공 시, HomeKit 상태를 즉시 '열림'으로 업데이트
                 this.service.updateCharacteristic(this.platform.Characteristic.LockCurrentState, this.platform.Characteristic.LockCurrentState.UNSECURED);
             } else {
                 this.platform.log.error(`Failed to unlock ${device.nickname}.`);
-                // 실패 시, 잠시 후 다시 '잠김' 상태로 되돌림
                 setTimeout(() => {
                     this.service.updateCharacteristic(this.platform.Characteristic.LockTargetState, this.platform.Characteristic.LockTargetState.SECURED);
                 }, 1000);
             }
         } else {
-            // API는 잠금(SECURE) 기능을 제공하지 않으므로, 사용자가 잠금을 시도하면 로그를 남기고 상태를 되돌립니다.
-            this.platform.log.info(`Locking ${device.nickname} via the app is not supported. The lock will secure automatically.`);
+            this.platform.log.info(`Locking ${device.nickname} via the app is not supported.`);
             setTimeout(() => {
                 this.service.updateCharacteristic(this.platform.Characteristic.LockTargetState, this.platform.Characteristic.LockTargetState.SECURED);
             }, 1000);

@@ -21,7 +21,6 @@ export class HeaterAccessory {
 
         this.service.setCharacteristic(this.platform.Characteristic.Name, subDevice.nickname);
 
-        // 현재/목표 온도 및 상태 특성 설정
         this.service.getCharacteristic(this.platform.Characteristic.Active)
             .onGet(this.getActive.bind(this))
             .onSet(this.setActive.bind(this));
@@ -30,8 +29,12 @@ export class HeaterAccessory {
             .onGet(this.getCurrentState.bind(this));
 
         this.service.getCharacteristic(this.platform.Characteristic.TargetHeaterCoolerState)
+            // 버그 수정: validValues를 HEAT로만 설정하여 다른 모드(냉방, 자동)를 UI에서 제거
+            .setProps({
+                validValues: [this.platform.Characteristic.TargetHeaterCoolerState.HEAT],
+            })
             .onSet(this.setTargetState.bind(this))
-            .onGet(this.getTargetState.bind(this)); // 목표 상태 onGet 추가
+            .onGet(this.getTargetState.bind(this));
 
         this.service.getCharacteristic(this.platform.Characteristic.CurrentTemperature)
             .onGet(this.getCurrentTemperature.bind(this));
@@ -41,6 +44,8 @@ export class HeaterAccessory {
             .onGet(this.getTargetTemperature.bind(this))
             .onSet(this.setTargetTemperature.bind(this));
     }
+
+    // ... (이하 다른 함수들은 이전과 동일)
 
     async getActive(): Promise<CharacteristicValue> {
         const subDevice = this.accessory.context.subDevice;
@@ -57,7 +62,6 @@ export class HeaterAccessory {
     }
 
     async getTargetState(): Promise<CharacteristicValue> {
-        // 이 API는 항상 난방만 지원하므로 HEAT를 반환합니다.
         return this.platform.Characteristic.TargetHeaterCoolerState.HEAT;
     }
 
@@ -74,24 +78,17 @@ export class HeaterAccessory {
     async setActive(value: CharacteristicValue) {
         const device = this.accessory.context.device;
         const subDevice = this.accessory.context.subDevice;
-
         const state = value === this.platform.Characteristic.Active.ACTIVE ? 'ON' : 'OFF';
         await this.platform.shomeClient.setDevice(device.thngId, subDevice.deviceId.toString(), 'HEATER', 'ON_OFF', state);
     }
 
     async setTargetState(value: CharacteristicValue) {
-        if (value !== this.platform.Characteristic.TargetHeaterCoolerState.HEAT) {
-            this.platform.log.warn(`${this.accessory.displayName} only supports heating.`);
-            setTimeout(() => {
-                this.service.updateCharacteristic(this.platform.Characteristic.TargetHeaterCoolerState, this.platform.Characteristic.TargetHeaterCoolerState.HEAT);
-            }, 100);
-        }
+        // 이 함수는 setProps로 인해 HEAT 값만 받게 되므로 별도 처리가 불필요합니다.
     }
 
     async setTargetTemperature(value: CharacteristicValue) {
         const device = this.accessory.context.device;
         const subDevice = this.accessory.context.subDevice;
-
         await this.platform.shomeClient.setDevice(device.thngId, subDevice.deviceId.toString(), 'HEATER', 'TEMPERATURE', value.toString());
     }
 }
