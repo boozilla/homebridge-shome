@@ -29,8 +29,6 @@ export class DoorlockAccessory {
 
     async getCurrentState(): Promise<CharacteristicValue> {
         const device = this.accessory.context.device;
-        // 버그 수정: status가 0이면 잠김(SECURED), 그 외(1)는 열림(UNSECURED)
-        // device.status가 boolean일 경우도 처리
         if (device.status === 0 || device.status === false) {
             return this.platform.Characteristic.LockCurrentState.UNSECURED;
         } else {
