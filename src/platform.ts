@@ -11,8 +11,8 @@ import { MotionSensorAccessory } from './accessories/motionSensorAccessory.js';
 import { WindowSensorAccessory } from './accessories/windowSensorAccessory.js';
 import { SosButtonAccessory } from './accessories/sosButtonAccessory.js';
 
-// 제어 가능한 장치 유형 목록
-const CONTROLLABLE_DEVICE_TYPES = ['LIGHT', 'HEATER', 'VENTILATOR'];
+// deviceInfoList를 가지고 있는 장치 유형
+const MULTI_DEVICE_TYPES = ['LIGHT', 'HEATER', 'VENTILATOR'];
 
 export class ShomePlatform implements DynamicPlatformPlugin {
     public readonly Service: typeof Service;
@@ -46,40 +46,62 @@ export class ShomePlatform implements DynamicPlatformPlugin {
 
     async discoverDevices() {
         const devices = await this.shomeClient.getDeviceList();
+        const foundAccessories: PlatformAccessory[] = [];
 
         for (const device of devices) {
-            // 제어 가능한 장치인 경우, 미리 deviceInfo를 가져와서 subDeviceId를 저장합니다.
-            if (CONTROLLABLE_DEVICE_TYPES.includes(device.thngModelTypeName)) {
+            if (MULTI_DEVICE_TYPES.includes(device.thngModelTypeName)) {
                 const deviceInfoList = await this.shomeClient.getDeviceInfo(device.thngId, device.thngModelTypeName);
-                if (deviceInfoList && deviceInfoList.length > 0) {
-                    // device 객체에 subDeviceId를 추가합니다.
-                    device.subDeviceId = deviceInfoList[0].deviceId;
-                } else {
-                    this.log.warn(`Could not retrieve sub-device ID for ${device.nickname}. Control might fail.`);
+
+                if (deviceInfoList) {
+                    for (const subDevice of deviceInfoList) {
+                        // 각 하위 장치에 대한 고유 UUID 생성
+                        const uuid = this.api.hap.uuid.generate(`${device.thngId}-${subDevice.deviceId}`);
+                        const accessory = this.setupAccessory(device, subDevice, uuid);
+                        foundAccessories.push(accessory);
+                    }
                 }
-            }
-
-            const uuid = this.api.hap.uuid.generate(device.thngId);
-            const existingAccessory = this.accessories.find(accessory => accessory.UUID === uuid);
-
-            if (existingAccessory) {
-                this.log.info('Restoring existing accessory from cache:', existingAccessory.displayName);
-                // 캐시된 액세서리의 context도 최신 device 정보로 업데이트합니다.
-                existingAccessory.context.device = device;
-                this.createAccessory(existingAccessory, device);
             } else {
-                this.log.info('Adding new accessory:', device.nickname);
-                const accessory = new this.api.platformAccessory(device.nickname, uuid);
-                accessory.context.device = device;
-                this.createAccessory(accessory, device);
-                this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+                // 단일 장치 처리
+                const uuid = this.api.hap.uuid.generate(device.thngId);
+                const accessory = this.setupAccessory(device, null, uuid);
+                foundAccessories.push(accessory);
             }
+        }
+
+        // 더 이상 존재하지 않는 액세서리 제거
+        const accessoriesToRemove = this.accessories.filter(cachedAccessory =>
+            !foundAccessories.some(foundAccessory => foundAccessory.UUID === cachedAccessory.UUID)
+        );
+        if (accessoriesToRemove.length > 0) {
+            this.log.info('Removing stale accessories:', accessoriesToRemove.map(a => a.displayName));
+            this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, accessoriesToRemove);
         }
     }
 
-    createAccessory(accessory: PlatformAccessory, device: any) {
-        // createAccessory는 이미 context가 설정된 accessory를 받으므로 여기서 context를 다시 설정할 필요는 없습니다.
-        // accessory.context.device = device;
+    setupAccessory(mainDevice: any, subDevice: any | null, uuid: string): PlatformAccessory {
+        const existingAccessory = this.accessories.find(accessory => accessory.UUID === uuid);
+
+        const displayName = subDevice ? `${mainDevice.nickname} - ${subDevice.nickname}` : mainDevice.nickname;
+
+        if (existingAccessory) {
+            this.log.info('Restoring existing accessory from cache:', displayName);
+            existingAccessory.context.device = mainDevice;
+            existingAccessory.context.subDevice = subDevice;
+            this.createAccessory(existingAccessory);
+            return existingAccessory;
+        } else {
+            this.log.info('Adding new accessory:', displayName);
+            const accessory = new this.api.platformAccessory(displayName, uuid);
+            accessory.context.device = mainDevice;
+            accessory.context.subDevice = subDevice;
+            this.createAccessory(accessory);
+            this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+            return accessory;
+        }
+    }
+
+    createAccessory(accessory: PlatformAccessory) {
+        const device = accessory.context.device;
         switch(device.thngModelTypeName) {
             case 'LIGHT':
                 new LightAccessory(this, accessory);
@@ -107,7 +129,6 @@ export class ShomePlatform implements DynamicPlatformPlugin {
                 break;
             case 'HSP':
                 this.log.info(`Ignoring HSP device type for "${device.nickname}"`);
-                this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
                 break;
             default:
                 new UnknownAccessory(this, accessory);

@@ -9,15 +9,17 @@ export class LightAccessory {
         private readonly accessory: PlatformAccessory,
     ) {
         const device = this.accessory.context.device;
+        const subDevice = this.accessory.context.subDevice;
+
         this.accessory.getService(this.platform.Service.AccessoryInformation)!
             .setCharacteristic(this.platform.Characteristic.Manufacturer, 'Samsung')
             .setCharacteristic(this.platform.Characteristic.Model, 'Smart Light')
-            .setCharacteristic(this.platform.Characteristic.SerialNumber, device.thngId);
+            .setCharacteristic(this.platform.Characteristic.SerialNumber, `${device.thngId}-${subDevice.deviceId}`);
 
         this.service = this.accessory.getService(this.platform.Service.Lightbulb) ||
             this.accessory.addService(this.platform.Service.Lightbulb);
 
-        this.service.setCharacteristic(this.platform.Characteristic.Name, device.nickname);
+        this.service.setCharacteristic(this.platform.Characteristic.Name, subDevice.nickname);
 
         this.service.getCharacteristic(this.platform.Characteristic.On)
             .onSet(this.setOn.bind(this));
@@ -25,15 +27,9 @@ export class LightAccessory {
 
     async setOn(value: CharacteristicValue) {
         const device = this.accessory.context.device;
-
-        // subDeviceId가 없으면 제어를 시도하지 않습니다.
-        if (!device.subDeviceId) {
-            this.platform.log.error(`No subDeviceId found for ${device.nickname}. Cannot set state.`);
-            return;
-        }
+        const subDevice = this.accessory.context.subDevice;
 
         const state = value ? 'ON' : 'OFF';
-        await this.platform.shomeClient.setDevice(device.thngId, device.subDeviceId, 'LIGHT', 'ON_OFF', state);
-        this.platform.log.info(`${device.nickname} set to ${state}`);
+        await this.platform.shomeClient.setDevice(device.thngId, subDevice.deviceId.toString(), 'LIGHT', 'ON_OFF', state);
     }
 }
