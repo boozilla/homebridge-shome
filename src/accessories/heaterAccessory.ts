@@ -1,5 +1,5 @@
-import {CharacteristicValue, PlatformAccessory, Service} from 'homebridge';
-import {ShomePlatform} from '../platform.js';
+import { Service, PlatformAccessory, CharacteristicValue } from 'homebridge';
+import { ShomePlatform } from '../platform.js';
 
 export class HeaterAccessory {
     private service: Service;
@@ -26,14 +26,27 @@ export class HeaterAccessory {
             .onSet(this.setTargetState.bind(this));
 
         this.service.getCharacteristic(this.platform.Characteristic.HeatingThresholdTemperature)
-            .setProps({minValue: 5, maxValue: 40, minStep: 1})
+            .setProps({ minValue: 5, maxValue: 40, minStep: 1 })
             .onSet(this.setTemperature.bind(this));
+    }
+
+    private async getSubDeviceId(): Promise<string | null> {
+        const device = this.accessory.context.device;
+        const deviceInfoList = await this.platform.shomeClient.getDeviceInfo(device.thngId, device.thngModelTypeName);
+        if (deviceInfoList && deviceInfoList.length > 0) {
+            return deviceInfoList[0].deviceId;
+        }
+        this.platform.log.error(`Could not get device info for ${device.nickname}`);
+        return null;
     }
 
     async setActive(value: CharacteristicValue) {
         const device = this.accessory.context.device;
+        const subDeviceId = await this.getSubDeviceId();
+        if (!subDeviceId) return;
+
         const state = value === this.platform.Characteristic.Active.ACTIVE ? 'ON' : 'OFF';
-        await this.platform.shomeClient.setDevice(device.thngId, '1', 'HEATER', 'ON_OFF', state);
+        await this.platform.shomeClient.setDevice(device.thngId, subDeviceId, 'HEATER', 'ON_OFF', state);
     }
 
     async setTargetState(value: CharacteristicValue) {
@@ -49,6 +62,9 @@ export class HeaterAccessory {
 
     async setTemperature(value: CharacteristicValue) {
         const device = this.accessory.context.device;
-        await this.platform.shomeClient.setDevice(device.thngId, '1', 'HEATER', 'TEMPERATURE', value.toString());
+        const subDeviceId = await this.getSubDeviceId();
+        if (!subDeviceId) return;
+
+        await this.platform.shomeClient.setDevice(device.thngId, subDeviceId, 'HEATER', 'TEMPERATURE', value.toString());
     }
 }

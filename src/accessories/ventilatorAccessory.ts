@@ -1,5 +1,5 @@
-import {CharacteristicValue, PlatformAccessory, Service} from 'homebridge';
-import {ShomePlatform} from '../platform.js';
+import { Service, PlatformAccessory, CharacteristicValue } from 'homebridge';
+import { ShomePlatform } from '../platform.js';
 
 export class VentilatorAccessory {
     private fanService: Service;
@@ -26,14 +26,30 @@ export class VentilatorAccessory {
             .onSet(this.setRotationSpeed.bind(this));
     }
 
+    private async getSubDeviceId(): Promise<string | null> {
+        const device = this.accessory.context.device;
+        const deviceInfoList = await this.platform.shomeClient.getDeviceInfo(device.thngId, device.thngModelTypeName);
+        if (deviceInfoList && deviceInfoList.length > 0) {
+            return deviceInfoList[0].deviceId;
+        }
+        this.platform.log.error(`Could not get device info for ${device.nickname}`);
+        return null;
+    }
+
     async setActive(value: CharacteristicValue) {
         const device = this.accessory.context.device;
+        const subDeviceId = await this.getSubDeviceId();
+        if (!subDeviceId) return;
+
         const state = value === this.platform.Characteristic.Active.ACTIVE ? 'ON' : 'OFF';
-        await this.platform.shomeClient.setDevice(device.thngId, '1', 'VENTILATOR', 'ON_OFF', state);
+        await this.platform.shomeClient.setDevice(device.thngId, subDeviceId, 'VENTILATOR', 'ON_OFF', state);
     }
 
     async setRotationSpeed(value: CharacteristicValue) {
         const device = this.accessory.context.device;
+        const subDeviceId = await this.getSubDeviceId();
+        if (!subDeviceId) return;
+
         const numericValue = Number(value);
 
         // sHome API uses 1,2,3 where 1 is strongest, 3 is weakest.
@@ -45,6 +61,6 @@ export class VentilatorAccessory {
         if (numericValue > 33) apiSpeed = 2;
         if (numericValue > 66) apiSpeed = 1;
 
-        await this.platform.shomeClient.setDevice(device.thngId, '1', 'VENTILATOR', 'WINDSPEED', apiSpeed.toString());
+        await this.platform.shomeClient.setDevice(device.thngId, subDeviceId, 'VENTILATOR', 'WINDSPEED', apiSpeed.toString());
     }
 }

@@ -1,5 +1,5 @@
-import {CharacteristicValue, PlatformAccessory, Service} from 'homebridge';
-import {ShomePlatform} from '../platform.js';
+import { Service, PlatformAccessory, CharacteristicValue } from 'homebridge';
+import { ShomePlatform } from '../platform.js';
 
 export class LightAccessory {
     private service: Service;
@@ -26,7 +26,14 @@ export class LightAccessory {
     async setOn(value: CharacteristicValue) {
         const device = this.accessory.context.device;
         const state = value ? 'ON' : 'OFF';
-        await this.platform.shomeClient.setDevice(device.thngId, '1', 'LIGHT', 'ON_OFF', state);
-        this.platform.log.info(`${device.nickname} set to ${state}`);
+
+        const deviceInfoList = await this.platform.shomeClient.getDeviceInfo(device.thngId, device.thngModelTypeName);
+        if (deviceInfoList && deviceInfoList.length > 0) {
+            const subDeviceId = deviceInfoList[0].deviceId;
+            await this.platform.shomeClient.setDevice(device.thngId, subDeviceId, 'LIGHT', 'ON_OFF', state);
+            this.platform.log.info(`${device.nickname} set to ${state}`);
+        } else {
+            this.platform.log.error(`Could not get device info for ${device.nickname}`);
+        }
     }
 }
