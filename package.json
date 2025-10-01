@@ -5,12 +5,12 @@
   "private": false,
   "description": "A Homebridge plugin for Samsung Smart Home",
   "author": "boozilla",
-  "license": "ISC",
+  "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/boozilla/homebridge-shome.git"
+    "url": "https://github.com/boozilla/homebridge-shome.git"
   },
   "bugs": {
     "url": "https://github.com/boozilla/homebridge-shome/issues"
