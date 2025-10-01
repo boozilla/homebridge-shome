@@ -1,5 +1,5 @@
-import { Service, PlatformAccessory, CharacteristicValue } from 'homebridge';
-import { ShomePlatform } from '../platform.js';
+import {CharacteristicValue, PlatformAccessory, Service} from 'homebridge';
+import {ShomePlatform} from '../platform.js';
 
 export class HeaterAccessory {
     private service: Service;
@@ -26,7 +26,7 @@ export class HeaterAccessory {
             .onSet(this.setTargetState.bind(this));
 
         this.service.getCharacteristic(this.platform.Characteristic.HeatingThresholdTemperature)
-            .setProps({ minValue: 5, maxValue: 40, minStep: 1 })
+            .setProps({minValue: 5, maxValue: 40, minStep: 1})
             .onSet(this.setTemperature.bind(this));
     }
 

@@ -1,5 +1,5 @@
-import { Service, PlatformAccessory } from 'homebridge';
-import { ShomePlatform } from '../platform.js';
+import {PlatformAccessory} from 'homebridge';
+import {ShomePlatform} from '../platform.js';
 
 export class UnknownAccessory {
     constructor(

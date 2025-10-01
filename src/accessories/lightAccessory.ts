@@ -1,5 +1,5 @@
-import { Service, PlatformAccessory, CharacteristicValue } from 'homebridge';
-import { ShomePlatform } from '../platform.js';
+import {CharacteristicValue, PlatformAccessory, Service} from 'homebridge';
+import {ShomePlatform} from '../platform.js';
 
 export class LightAccessory {
     private service: Service;

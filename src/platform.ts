@@ -1,11 +1,23 @@
-import { API, DynamicPlatformPlugin, Logger, PlatformAccessory, PlatformConfig, Service, Characteristic } from 'homebridge';
-import { PLATFORM_NAME, PLUGIN_NAME } from './settings.js';
-import { ShomeClient } from './shomeClient.js';
-import { LightAccessory } from './accessories/lightAccessory.js';
-import { VentilatorAccessory } from './accessories/ventilatorAccessory.js';
-import { HeaterAccessory } from './accessories/heaterAccessory.js';
-import { DoorlockAccessory } from './accessories/doorlockAccessory.js';
-import { UnknownAccessory } from './accessories/unknownAccessory.js';
+import {
+    API,
+    Characteristic,
+    DynamicPlatformPlugin,
+    Logger,
+    PlatformAccessory,
+    PlatformConfig,
+    Service
+} from 'homebridge';
+import {PLATFORM_NAME, PLUGIN_NAME} from './settings.js';
+import {ShomeClient} from './shomeClient.js';
+import {LightAccessory} from './accessories/lightAccessory.js';
+import {VentilatorAccessory} from './accessories/ventilatorAccessory.js';
+import {HeaterAccessory} from './accessories/heaterAccessory.js';
+import {DoorlockAccessory} from './accessories/doorlockAccessory.js';
+import {UnknownAccessory} from './accessories/unknownAccessory.js';
+import {GasValveAccessory} from './accessories/gasValveAccessory.js';
+import {MotionSensorAccessory} from './accessories/motionSensorAccessory.js';
+import {WindowSensorAccessory} from './accessories/windowSensorAccessory.js';
+import {SosButtonAccessory} from './accessories/sosButtonAccessory.js';
 
 
 export class ShomePlatform implements DynamicPlatformPlugin {
@@ -60,7 +72,7 @@ export class ShomePlatform implements DynamicPlatformPlugin {
 
     createAccessory(accessory: PlatformAccessory, device: any) {
         accessory.context.device = device;
-        switch(device.thngModelTypeName) { // Note: using the original type name from API
+        switch (device.thngModelTypeName) { // Note: using the original type name from API
             case 'LIGHT':
                 new LightAccessory(this, accessory);
                 break;
@@ -72,6 +84,18 @@ export class ShomePlatform implements DynamicPlatformPlugin {
                 break;
             case 'DOORLOCK':
                 new DoorlockAccessory(this, accessory);
+                break;
+            case 'WIRED GAS VALVE':
+                new GasValveAccessory(this, accessory);
+                break;
+            case 'WIRED MOTION SENSOR':
+                new MotionSensorAccessory(this, accessory);
+                break;
+            case 'WIRED WINDOW SENSOR':
+                new WindowSensorAccessory(this, accessory);
+                break;
+            case 'SOS BUTTON':
+                new SosButtonAccessory(this, accessory);
                 break;
             default:
                 new UnknownAccessory(this, accessory);
