@@ -1,14 +1,13 @@
-import {API, Characteristic, DynamicPlatformPlugin, Logger, PlatformAccessory, PlatformConfig, Service} from 'homebridge';
-import {PLATFORM_NAME, PLUGIN_NAME} from './settings.js';
-import {ShomeClient} from './shomeClient.js';
-import {LightAccessory} from './accessories/lightAccessory.js';
-import {VentilatorAccessory} from './accessories/ventilatorAccessory.js';
-import {HeaterAccessory} from './accessories/heaterAccessory.js';
-import {DoorlockAccessory} from './accessories/doorlockAccessory.js';
+import { API, Characteristic, DynamicPlatformPlugin, Logger, PlatformAccessory, PlatformConfig, Service } from 'homebridge';
+import { PLATFORM_NAME, PLUGIN_NAME } from './settings.js';
+import { ShomeClient, MainDevice, SubDevice } from './shomeClient.js';
+import { LightAccessory } from './accessories/lightAccessory.js';
+import { VentilatorAccessory } from './accessories/ventilatorAccessory.js';
+import { HeaterAccessory } from './accessories/heaterAccessory.js';
+import { DoorlockAccessory } from './accessories/doorlockAccessory.js';
 
 const CONTROLLABLE_MULTI_DEVICE_TYPES = ['LIGHT', 'HEATER', 'VENTILATOR'];
 const SPECIAL_CONTROLLABLE_TYPES = ['DOORLOCK'];
-
 
 export class ShomePlatform implements DynamicPlatformPlugin {
   public readonly Service: typeof Service;
@@ -73,7 +72,7 @@ export class ShomePlatform implements DynamicPlatformPlugin {
     }
   }
 
-  setupAccessory(mainDevice: any, subDevice: any | null, uuid: string): PlatformAccessory {
+  setupAccessory(mainDevice: MainDevice, subDevice: SubDevice | null, uuid: string): PlatformAccessory {
     const displayName = subDevice ? subDevice.nickname : mainDevice.nickname;
     const existingAccessory = this.accessories.find(accessory => accessory.UUID === uuid);
 
@@ -97,18 +96,18 @@ export class ShomePlatform implements DynamicPlatformPlugin {
   createAccessory(accessory: PlatformAccessory) {
     const device = accessory.context.device;
     switch (device.thngModelTypeName) {
-      case 'LIGHT':
-        new LightAccessory(this, accessory);
-        break;
-      case 'VENTILATOR':
-        new VentilatorAccessory(this, accessory);
-        break;
-      case 'HEATER':
-        new HeaterAccessory(this, accessory);
-        break;
-      case 'DOORLOCK':
-        new DoorlockAccessory(this, accessory);
-        break;
+    case 'LIGHT':
+      new LightAccessory(this, accessory);
+      break;
+    case 'VENTILATOR':
+      new VentilatorAccessory(this, accessory);
+      break;
+    case 'HEATER':
+      new HeaterAccessory(this, accessory);
+      break;
+    case 'DOORLOCK':
+      new DoorlockAccessory(this, accessory);
+      break;
     }
   }
 }

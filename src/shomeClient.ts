@@ -1,17 +1,24 @@
 import axios from 'axios';
 import CryptoJS from 'crypto-js';
-import {Logger} from 'homebridge';
+import { Logger } from 'homebridge';
 
 const BASE_URL = 'https://shome-api.samsung-ihp.com';
 const APP_REGST_ID = '6110736314d9eef6baf393f3e43a5342f9ccde6ef300d878385acd9264cf14d5';
 const CHINA_APP_REGST_ID = 'SHOME==6110736314d9eef6baf393f3e43a5342f9ccde6ef300d878385acd9264cf14d5';
 const LANGUAGE = 'KOR';
 
-// 응답에서 deviceInfoList의 타입을 정의합니다.
-interface DeviceInfo {
-  deviceId: string;
+// Define and export interfaces for device types
+export interface MainDevice {
+  thngId: string;
+  thngModelTypeName: string;
+  nickname: string;
+  [key: string]: unknown;
+}
 
-  [key: string]: any; // 다른 속성들을 포함할 수 있습니다.
+export interface SubDevice {
+  deviceId: string;
+  nickname: string;
+  [key: string]: unknown;
 }
 
 export class ShomeClient {
@@ -71,7 +78,7 @@ export class ShomeClient {
     }
   }
 
-  async getDeviceList(): Promise<any[]> {
+  async getDeviceList(): Promise<MainDevice[]> {
     const token = await this.login();
     if (!token || !this.ihdId) {
       return [];
@@ -82,8 +89,8 @@ export class ShomeClient {
       const hashData = this.sha512(`IHRESTAPI${this.ihdId}${createDate}`);
 
       const response = await axios.get(`${BASE_URL}/v16/settings/${this.ihdId}/devices/`, {
-        params: {createDate, hashData},
-        headers: {'Authorization': `Bearer ${token}`},
+        params: { createDate, hashData },
+        headers: { 'Authorization': `Bearer ${token}` },
       });
 
       return response.data.deviceList || [];
@@ -93,7 +100,7 @@ export class ShomeClient {
     }
   }
 
-  async getDeviceInfo(thingId: string, type: string): Promise<DeviceInfo[] | null> {
+  async getDeviceInfo(thingId: string, type: string): Promise<SubDevice[] | null> {
     const token = await this.login();
     if (!token) {
       return null;
@@ -105,8 +112,8 @@ export class ShomeClient {
       const typePath = type.toLowerCase().replace(/_/g, '');
 
       const response = await axios.get(`${BASE_URL}/v18/settings/${typePath}/${thingId}`, {
-        params: {createDate, hashData},
-        headers: {'Authorization': `Bearer ${token}`},
+        params: { createDate, hashData },
+        headers: { 'Authorization': `Bearer ${token}` },
       });
 
       return response.data.deviceInfoList || null;
@@ -134,7 +141,7 @@ export class ShomeClient {
           [controlType === 'WINDSPEED' ? 'mode' : 'state']: state,
           hashData,
         },
-        headers: {'Authorization': `Bearer ${token}`},
+        headers: { 'Authorization': `Bearer ${token}` },
       });
 
       this.log.info(`Set ${type} [${thingId}/${deviceId}] to ${state}`);
@@ -161,7 +168,7 @@ export class ShomeClient {
           pin: '',
           hashData,
         },
-        headers: {'Authorization': `Bearer ${token}`},
+        headers: { 'Authorization': `Bearer ${token}` },
       });
 
       this.log.info(`Unlocked doorlock [${thingId}]`);

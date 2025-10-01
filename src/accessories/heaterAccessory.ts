@@ -1,5 +1,5 @@
-import {CharacteristicValue, PlatformAccessory, Service} from 'homebridge';
-import {ShomePlatform} from '../platform.js';
+import { CharacteristicValue, PlatformAccessory, Service } from 'homebridge';
+import { ShomePlatform } from '../platform.js';
 
 export class HeaterAccessory {
   private service: Service;
@@ -40,7 +40,7 @@ export class HeaterAccessory {
       .onGet(this.getCurrentTemperature.bind(this));
 
     this.service.getCharacteristic(this.platform.Characteristic.HeatingThresholdTemperature)
-      .setProps({minValue: 5, maxValue: 40, minStep: 1})
+      .setProps({ minValue: 5, maxValue: 40, minStep: 1 })
       .onGet(this.getTargetTemperature.bind(this))
       .onSet(this.setTargetTemperature.bind(this));
   }
@@ -82,7 +82,7 @@ export class HeaterAccessory {
     await this.platform.shomeClient.setDevice(device.thngId, subDevice.deviceId.toString(), 'HEATER', 'ON_OFF', state);
   }
 
-  async setTargetState(value: CharacteristicValue) {
+  async setTargetState() {
     // 이 함수는 setProps로 인해 HEAT 값만 받게 되므로 별도 처리가 불필요합니다.
   }
 
