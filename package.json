@@ -1,0 +1,49 @@
+{
+  "name": "homebridge-shome",
+  "displayName": "sHome Plugin",
+  "version": "1.0.0",
+  "private": false,
+  "description": "A Homebridge plugin for Samsung Smart Home",
+  "author": "Your Name",
+  "license": "ISC",
+  "type": "module",
+  "main": "dist/index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/boozilla/homebridge-shome.git"
+  },
+  "bugs": {
+    "url": "https://github.com/boozilla/homebridge-shome/issues"
+  },
+  "homepage": "https://github.com/boozilla/homebridge-shome#readme",
+  "scripts": {
+    "lint": "eslint . --max-warnings=0",
+    "watch": "npm run build && npm link && nodemon",
+    "build": "rimraf ./dist && tsc",
+    "prepublishOnly": "npm run lint && npm run build"
+  },
+  "keywords": [
+    "homebridge-plugin",
+    "shome"
+  ],
+  "engines": {
+    "node": "^18.15.0 || ^20.7.0 || ^22",
+    "homebridge": "^1.8.0 || ^2.0.0-beta.0"
+  },
+  "dependencies": {
+    "axios": "^1.7.2",
+    "crypto-js": "^4.2.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.36.0",
+    "@types/crypto-js": "^4.2.2",
+    "@types/node": "^22.12.12",
+    "eslint": "^9.36.0",
+    "homebridge": "^2.0.0-beta.30",
+    "nodemon": "^3.1.10",
+    "rimraf": "^5.0.7",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5",
+    "typescript-eslint": "^8.44.0"
+  }
+}
