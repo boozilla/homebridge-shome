@@ -13,15 +13,9 @@ import {LightAccessory} from './accessories/lightAccessory.js';
 import {VentilatorAccessory} from './accessories/ventilatorAccessory.js';
 import {HeaterAccessory} from './accessories/heaterAccessory.js';
 import {DoorlockAccessory} from './accessories/doorlockAccessory.js';
-import {GasValveAccessory} from './accessories/gasValveAccessory.js';
-import {MotionSensorAccessory} from './accessories/motionSensorAccessory.js';
-import {WindowSensorAccessory} from './accessories/windowSensorAccessory.js';
-import {SosButtonAccessory} from './accessories/sosButtonAccessory.js';
 
-// 제어 가능하며, 하위 장치 목록을 가지는 유형
 const CONTROLLABLE_MULTI_DEVICE_TYPES = ['LIGHT', 'HEATER', 'VENTILATOR'];
-// 제어는 불가능하지만, 센서로 노출할 장치 유형
-const DISPLAYABLE_SENSOR_TYPES = ['DOORLOCK', 'WIRED GAS VALVE', 'WIRED MOTION SENSOR', 'WIRED WINDOW SENSOR', 'SOS BUTTON'];
+const SPECIAL_CONTROLLABLE_TYPES = ['DOORLOCK'];
 
 
 export class ShomePlatform implements DynamicPlatformPlugin {
@@ -69,7 +63,7 @@ export class ShomePlatform implements DynamicPlatformPlugin {
                         foundAccessories.push(accessory);
                     }
                 }
-            } else if (DISPLAYABLE_SENSOR_TYPES.includes(device.thngModelTypeName)) {
+            } else if (SPECIAL_CONTROLLABLE_TYPES.includes(device.thngModelTypeName)) {
                 const uuid = this.api.hap.uuid.generate(device.thngId);
                 const accessory = this.setupAccessory(device, null, uuid);
                 foundAccessories.push(accessory);
@@ -123,19 +117,6 @@ export class ShomePlatform implements DynamicPlatformPlugin {
             case 'DOORLOCK':
                 new DoorlockAccessory(this, accessory);
                 break;
-            case 'WIRED GAS VALVE':
-                new GasValveAccessory(this, accessory);
-                break;
-            case 'WIRED MOTION SENSOR':
-                new MotionSensorAccessory(this, accessory);
-                break;
-            case 'WIRED WINDOW SENSOR':
-                new WindowSensorAccessory(this, accessory);
-                break;
-            case 'SOS BUTTON':
-                new SosButtonAccessory(this, accessory);
-                break;
-            // HSP 및 기타 미지원 장치는 case가 없으므로 아무것도 생성하지 않음
         }
     }
 }
