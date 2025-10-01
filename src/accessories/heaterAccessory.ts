@@ -42,11 +42,13 @@ export class HeaterAccessory {
 
     async setActive(value: CharacteristicValue) {
         const device = this.accessory.context.device;
-        const subDeviceId = await this.getSubDeviceId();
-        if (!subDeviceId) return;
+        if (!device.subDeviceId) {
+            this.platform.log.error(`No subDeviceId found for ${device.nickname}. Cannot set active state.`);
+            return;
+        }
 
         const state = value === this.platform.Characteristic.Active.ACTIVE ? 'ON' : 'OFF';
-        await this.platform.shomeClient.setDevice(device.thngId, subDeviceId, 'HEATER', 'ON_OFF', state);
+        await this.platform.shomeClient.setDevice(device.thngId, device.subDeviceId, 'HEATER', 'ON_OFF', state);
     }
 
     async setTargetState(value: CharacteristicValue) {
@@ -62,9 +64,11 @@ export class HeaterAccessory {
 
     async setTemperature(value: CharacteristicValue) {
         const device = this.accessory.context.device;
-        const subDeviceId = await this.getSubDeviceId();
-        if (!subDeviceId) return;
+        if (!device.subDeviceId) {
+            this.platform.log.error(`No subDeviceId found for ${device.nickname}. Cannot set temperature.`);
+            return;
+        }
 
-        await this.platform.shomeClient.setDevice(device.thngId, subDeviceId, 'HEATER', 'TEMPERATURE', value.toString());
+        await this.platform.shomeClient.setDevice(device.thngId, device.subDeviceId, 'HEATER', 'TEMPERATURE', value.toString());
     }
 }

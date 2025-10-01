@@ -38,29 +38,27 @@ export class VentilatorAccessory {
 
     async setActive(value: CharacteristicValue) {
         const device = this.accessory.context.device;
-        const subDeviceId = await this.getSubDeviceId();
-        if (!subDeviceId) return;
+        if (!device.subDeviceId) {
+            this.platform.log.error(`No subDeviceId found for ${device.nickname}. Cannot set active state.`);
+            return;
+        }
 
         const state = value === this.platform.Characteristic.Active.ACTIVE ? 'ON' : 'OFF';
-        await this.platform.shomeClient.setDevice(device.thngId, subDeviceId, 'VENTILATOR', 'ON_OFF', state);
+        await this.platform.shomeClient.setDevice(device.thngId, device.subDeviceId, 'VENTILATOR', 'ON_OFF', state);
     }
 
     async setRotationSpeed(value: CharacteristicValue) {
         const device = this.accessory.context.device;
-        const subDeviceId = await this.getSubDeviceId();
-        if (!subDeviceId) return;
+        if (!device.subDeviceId) {
+            this.platform.log.error(`No subDeviceId found for ${device.nickname}. Cannot set rotation speed.`);
+            return;
+        }
 
         const numericValue = Number(value);
-
-        // sHome API uses 1,2,3 where 1 is strongest, 3 is weakest.
-        // HomeKit uses percentages. Let's map it.
-        // 1-33% -> speed 3 (weakest)
-        // 34-66% -> speed 2 (medium)
-        // 67-100% -> speed 1 (strongest)
         let apiSpeed = 3;
         if (numericValue > 33) apiSpeed = 2;
         if (numericValue > 66) apiSpeed = 1;
 
-        await this.platform.shomeClient.setDevice(device.thngId, subDeviceId, 'VENTILATOR', 'WINDSPEED', apiSpeed.toString());
+        await this.platform.shomeClient.setDevice(device.thngId, device.subDeviceId, 'VENTILATOR', 'WINDSPEED', apiSpeed.toString());
     }
 }

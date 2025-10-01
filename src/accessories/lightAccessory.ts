@@ -25,15 +25,15 @@ export class LightAccessory {
 
     async setOn(value: CharacteristicValue) {
         const device = this.accessory.context.device;
-        const state = value ? 'ON' : 'OFF';
 
-        const deviceInfoList = await this.platform.shomeClient.getDeviceInfo(device.thngId, device.thngModelTypeName);
-        if (deviceInfoList && deviceInfoList.length > 0) {
-            const subDeviceId = deviceInfoList[0].deviceId;
-            await this.platform.shomeClient.setDevice(device.thngId, subDeviceId, 'LIGHT', 'ON_OFF', state);
-            this.platform.log.info(`${device.nickname} set to ${state}`);
-        } else {
-            this.platform.log.error(`Could not get device info for ${device.nickname}`);
+        // subDeviceId가 없으면 제어를 시도하지 않습니다.
+        if (!device.subDeviceId) {
+            this.platform.log.error(`No subDeviceId found for ${device.nickname}. Cannot set state.`);
+            return;
         }
+
+        const state = value ? 'ON' : 'OFF';
+        await this.platform.shomeClient.setDevice(device.thngId, device.subDeviceId, 'LIGHT', 'ON_OFF', state);
+        this.platform.log.info(`${device.nickname} set to ${state}`);
     }
 }
