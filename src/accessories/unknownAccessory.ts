@@ -8,8 +8,6 @@ export class UnknownAccessory {
     ) {
         const device = this.accessory.context.device;
 
-        // 지원되지 않는 장치의 전체 데이터를 로그로 출력합니다.
-        this.platform.log.warn('Unsupported device detected. Full device data:', JSON.stringify(device, null, 2));
         this.platform.log.warn(`Unsupported device type: ${device.thngModelTypeName}. Creating a simple switch.`);
 
         this.accessory.getService(this.platform.Service.AccessoryInformation)!

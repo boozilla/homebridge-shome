@@ -97,6 +97,9 @@ export class ShomePlatform implements DynamicPlatformPlugin {
             case 'SOS BUTTON':
                 new SosButtonAccessory(this, accessory);
                 break;
+            case 'HSP':
+                this.log.info(`Ignoring HSP device type for "${device.nickname}"`);
+                break;
             default:
                 new UnknownAccessory(this, accessory);
                 break;
