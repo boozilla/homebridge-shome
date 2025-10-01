@@ -7,7 +7,7 @@ export class UnknownAccessory {
         private readonly accessory: PlatformAccessory,
     ) {
         const device = this.accessory.context.device;
-        this.platform.log.warn(`Unsupported device type: ${device.type}. Creating a simple switch.`);
+        this.platform.log.warn(`Unsupported device type: ${device.thngModelTypeName}. Creating a simple switch.`);
 
         this.accessory.getService(this.platform.Service.AccessoryInformation)!
             .setCharacteristic(this.platform.Characteristic.Manufacturer, 'Samsung')
