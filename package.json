@@ -1,5 +1,5 @@
 {
-  "name": "homebridge-shome",
+  "name": "@boozilla/homebridge-shome",
   "displayName": "sHome Plugin",
   "version": "1.0.0",
   "private": false,
