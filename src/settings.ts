@@ -6,4 +6,4 @@ export const PLATFORM_NAME = 'sHome';
 /**
  * This must match the name of your plugin as defined the package.json
  */
-export const PLUGIN_NAME = 'homebridge-shome';
+export const PLUGIN_NAME = '@boozilla/homebridge-shome';
