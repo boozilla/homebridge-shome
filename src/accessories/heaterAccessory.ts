@@ -28,6 +28,9 @@ export class HeaterAccessory {
         this.service.getCharacteristic(this.platform.Characteristic.CurrentHeaterCoolerState)
           .onGet(this.getCurrentState.bind(this));
 
+        // Set a valid initial value before applying props to prevent errors
+        this.service.updateCharacteristic(this.platform.Characteristic.TargetHeaterCoolerState, this.platform.Characteristic.TargetHeaterCoolerState.HEAT);
+
         this.service.getCharacteristic(this.platform.Characteristic.TargetHeaterCoolerState)
           .setProps({
             validValues: [this.platform.Characteristic.TargetHeaterCoolerState.HEAT],
@@ -69,7 +72,13 @@ export class HeaterAccessory {
 
   async getTargetTemperature(): Promise<CharacteristicValue> {
     const subDevice = this.accessory.context.subDevice;
-    return subDevice.setTemp;
+    const targetTemp = subDevice.setTemp as number | undefined;
+
+    // If the temperature from the API is invalid or below the minimum, return a safe default value.
+    if (targetTemp === undefined || targetTemp === null || targetTemp < 5) {
+      return 5; // Return the minimum allowed temperature
+    }
+    return targetTemp;
   }
 
   async setActive(value: CharacteristicValue) {
