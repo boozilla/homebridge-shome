@@ -28,7 +28,6 @@ export class HeaterAccessory {
         this.service.getCharacteristic(this.platform.Characteristic.CurrentHeaterCoolerState)
           .onGet(this.getCurrentState.bind(this));
 
-        // Set a valid initial value before applying props to prevent errors
         this.service.updateCharacteristic(this.platform.Characteristic.TargetHeaterCoolerState, this.platform.Characteristic.TargetHeaterCoolerState.HEAT);
 
         this.service.getCharacteristic(this.platform.Characteristic.TargetHeaterCoolerState)
@@ -41,7 +40,15 @@ export class HeaterAccessory {
         this.service.getCharacteristic(this.platform.Characteristic.CurrentTemperature)
           .onGet(this.getCurrentTemperature.bind(this));
 
-        this.service.getCharacteristic(this.platform.Characteristic.HeatingThresholdTemperature)
+        const thresholdCharacteristic = this.service.getCharacteristic(this.platform.Characteristic.HeatingThresholdTemperature);
+
+        // Prevent initial value error log by setting a valid default if the current value is out of bounds.
+        const currentTargetTemp = this.accessory.context.subDevice.setTemp;
+        if (currentTargetTemp < 5) {
+          thresholdCharacteristic.updateValue(5);
+        }
+
+        thresholdCharacteristic
           .setProps({ minValue: 5, maxValue: 40, minStep: 1 })
           .onGet(this.getTargetTemperature.bind(this))
           .onSet(this.setTargetTemperature.bind(this));
@@ -72,11 +79,11 @@ export class HeaterAccessory {
 
   async getTargetTemperature(): Promise<CharacteristicValue> {
     const subDevice = this.accessory.context.subDevice;
-    const targetTemp = subDevice.setTemp as number | undefined;
+    const targetTemp = subDevice.setTemp;
 
-    // If the temperature from the API is invalid or below the minimum, return a safe default value.
-    if (targetTemp === undefined || targetTemp === null || targetTemp < 5) {
-      return 5; // Return the minimum allowed temperature
+    // When the heater is off, the API might return 0. We should return a valid temp for HomeKit.
+    if (subDevice.deviceStatus !== 1 || targetTemp < 5) {
+      return 5;
     }
     return targetTemp;
   }
@@ -101,6 +108,7 @@ export class HeaterAccessory {
   async setTargetTemperature(value: CharacteristicValue) {
     const device = this.accessory.context.device;
     const subDevice = this.accessory.context.subDevice;
+
     const success = await this.platform.shomeClient.setDevice(
       device.thngId,
       subDevice.deviceId.toString(),
