@@ -72,6 +72,7 @@ export class ShomeClient {
     this.isProcessing = false;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async executeTaskWithRetries(task: QueueTask<any>): Promise<any> {
     let retries = 0;
     while (true) {
@@ -182,7 +183,7 @@ export class ShomeClient {
         params: { createDate, hashData },
         headers: { 'Authorization': `Bearer ${token}` },
       });
-      return response.data.deviceInfoList || null;
+      return response.data.deviceList || null;
     });
   }
 
