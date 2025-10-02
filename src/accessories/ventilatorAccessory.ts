@@ -77,7 +77,13 @@ export class VentilatorAccessory {
       apiSpeed = 1;
     }
 
-    const success = await this.platform.shomeClient.setDevice(device.thngId, subDevice.deviceId.toString(), 'VENTILATOR', 'WINDSPEED', apiSpeed.toString(), subDevice.nickname);
+    const success = await this.platform.shomeClient.setDevice(
+      device.thngId,
+      subDevice.deviceId.toString(),
+      'VENTILATOR',
+      'WINDSPEED',
+      apiSpeed.toString(),
+      subDevice.nickname);
 
     if (success) {
       this.accessory.context.subDevice.windSpeedMode = apiSpeed;

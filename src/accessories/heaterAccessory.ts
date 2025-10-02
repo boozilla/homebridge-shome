@@ -92,7 +92,13 @@ export class HeaterAccessory {
   async setTargetTemperature(value: CharacteristicValue) {
     const device = this.accessory.context.device;
     const subDevice = this.accessory.context.subDevice;
-    const success = await this.platform.shomeClient.setDevice(device.thngId, subDevice.deviceId.toString(), 'HEATER', 'TEMPERATURE', value.toString(), subDevice.nickname);
+    const success = await this.platform.shomeClient.setDevice(
+      device.thngId,
+      subDevice.deviceId.toString(),
+      'HEATER',
+      'TEMPERATURE',
+      value.toString(),
+      subDevice.nickname);
 
     if (success) {
       this.accessory.context.subDevice.setTemp = value as number;
