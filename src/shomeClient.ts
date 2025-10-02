@@ -116,8 +116,6 @@ export class ShomeClient {
         headers: { 'Authorization': `Bearer ${token}` },
       });
 
-      this.log.info(response.data);
-
       return response.data.deviceInfoList || null;
     } catch (error) {
       this.log.error(`Error getting device info for ${thingId}: ${error}`);
