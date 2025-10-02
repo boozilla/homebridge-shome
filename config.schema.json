@@ -31,7 +31,8 @@
         "title": "Polling Interval (ms)",
         "type": "integer",
         "default": 3000,
-        "description": "The interval in milliseconds to poll for device status updates. Set to 0 to disable."
+        "description": "The interval in milliseconds to poll for device status updates. Set to 0 to disable.",
+        "required": false
       }
     }
   },
