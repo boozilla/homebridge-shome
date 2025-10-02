@@ -46,29 +46,38 @@ export class ShomeClient {
   ) {
   }
 
-  private async enqueue<T>(request: () => Promise<T>): Promise<T> {
+  private enqueue<T>(request: () => Promise<T>): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       this.requestQueue.push({ request, resolve, reject, authRetry: false });
-      if (!this.isProcessing) {
-        this.processQueue();
-      }
+      this.processQueue();
     });
   }
 
   private async processQueue(): Promise<void> {
-    if (this.isProcessing || this.requestQueue.length === 0) {
-      return;
+    if (this.isProcessing) {
+      return; // A processing loop is already running
     }
     this.isProcessing = true;
-    const task = this.requestQueue.shift()!;
-    let retries = 0;
 
-    const execute = async () => {
+    while (this.requestQueue.length > 0) {
+      const task = this.requestQueue.shift()!;
+      try {
+        const result = await this.executeTaskWithRetries(task);
+        task.resolve(result);
+      } catch (error) {
+        task.reject(error);
+      }
+    }
+
+    this.isProcessing = false;
+  }
+
+  private async executeTaskWithRetries(task: QueueTask<any>): Promise<any> {
+    let retries = 0;
+    while (true) {
       try {
         const result = await task.request();
-        task.resolve(result);
-        this.isProcessing = false;
-        this.processQueue();
+        return result;
       } catch (error) {
         const isAuthError = axios.isAxiosError(error) && error.response?.status === 401;
 
@@ -77,22 +86,20 @@ export class ShomeClient {
           this.cachedAccessToken = null;
           this.tokenExpiry = 0;
           task.authRetry = true;
-          setTimeout(execute, 100);
-        } else if (!isAuthError && retries < MAX_RETRIES) {
-          retries++;
-          const backoffTime = INITIAL_BACKOFF_MS * Math.pow(2, retries - 1);
-          this.log.warn(`Request failed. Retrying in ${backoffTime}ms... (Attempt ${retries}/${MAX_RETRIES})`);
-          setTimeout(execute, backoffTime);
-        } else {
-          this.log.error(`Request failed after ${MAX_RETRIES} retries.`, error);
-          task.reject(error);
-          this.isProcessing = false;
-          this.processQueue();
+          continue; // Immediately retry the request
         }
-      }
-    };
 
-    await execute();
+        if (retries >= MAX_RETRIES) {
+          this.log.error(`Request failed after ${MAX_RETRIES} retries. Giving up.`, error);
+          throw error; // Throw final error
+        }
+
+        retries++;
+        const backoffTime = INITIAL_BACKOFF_MS * Math.pow(2, retries - 1);
+        this.log.warn(`Request failed. Retrying in ${backoffTime}ms... (Attempt ${retries}/${MAX_RETRIES})`);
+        await new Promise(resolve => setTimeout(resolve, backoffTime));
+      }
+    }
   }
 
   async login(): Promise<string | null> {
