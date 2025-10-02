@@ -167,6 +167,7 @@ export class ShomeClient {
         params: { createDate, hashData },
         headers: { 'Authorization': `Bearer ${token}` },
       });
+
       return response.data.deviceList || [];
     });
   }

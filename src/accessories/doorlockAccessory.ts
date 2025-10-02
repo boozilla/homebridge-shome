@@ -29,10 +29,10 @@ export class DoorlockAccessory {
 
   async getCurrentState(): Promise<CharacteristicValue> {
     const device = this.accessory.context.device;
-    if (device.status === 0 || device.status === false) {
-      return this.platform.Characteristic.LockCurrentState.UNSECURED;
-    } else {
+    if (device.status === true) {
       return this.platform.Characteristic.LockCurrentState.SECURED;
+    } else {
+      return this.platform.Characteristic.LockCurrentState.UNSECURED;
     }
   }
 
@@ -43,7 +43,7 @@ export class DoorlockAccessory {
       const success = await this.platform.shomeClient.unlockDoorlock(device.thngId, device.nickname);
 
       if (success) {
-        this.accessory.context.device.status = 0;
+        this.accessory.context.device.status = false;
         this.service.updateCharacteristic(this.platform.Characteristic.LockCurrentState, this.platform.Characteristic.LockCurrentState.UNSECURED);
       } else {
         setTimeout(() => {
