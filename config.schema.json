@@ -5,28 +5,32 @@
       "name": {
         "title": "Name",
         "type": "string",
-        "default": "sHome",
-        "required": true
+        "default": "sHome"
       },
       "username": {
         "title": "Username",
         "type": "string",
-        "description": "Your Samsung sHome account username.",
-        "required": true
+        "description": "Your Samsung sHome account username."
       },
       "password": {
         "title": "Password",
         "type": "string",
         "description": "Your Samsung sHome account password.",
-        "required": true,
         "format": "password"
       },
       "deviceId": {
         "title": "Device ID",
         "type": "string",
-        "description": "Your mobile device ID.",
-        "required": true
+        "description": "Your mobile device ID."
       }
-    }
-  }
+    },
+    "required": [
+      "name",
+      "username",
+      "password",
+      "deviceId"
+    ]
+  },
+  "pluginAlias": "sHome",
+  "pluginType": "platform"
 }
