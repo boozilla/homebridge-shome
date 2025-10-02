@@ -21,7 +21,7 @@ door locks, using the Home app and Siri on your Apple devices.
 If you have a running Homebridge setup, install the plugin using the following command:
 
 ```sh
-npm install -g homebridge-shome
+npm install -g @boozilla/homebridge-shome
 ```
 
 ## Configuration
