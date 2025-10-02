@@ -1,5 +1,6 @@
 import { CharacteristicValue, PlatformAccessory, Service } from 'homebridge';
 import { ShomePlatform } from '../platform.js';
+import { SubDevice } from '../shomeClient.js';
 
 export class LightAccessory {
   private service: Service;
@@ -42,6 +43,14 @@ export class LightAccessory {
       this.accessory.context.subDevice.deviceStatus = value ? 1 : 0;
     } else {
       throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
+    }
+  }
+
+  async updateState(newSubDevice: SubDevice) {
+    if (this.accessory.context.subDevice.deviceStatus !== newSubDevice.deviceStatus) {
+      this.platform.log.info(`Updating state for ${this.accessory.displayName}: ${newSubDevice.deviceStatus ? 'ON' : 'OFF'}`);
+      this.accessory.context.subDevice = newSubDevice;
+      this.service.updateCharacteristic(this.platform.Characteristic.On, await this.getOn());
     }
   }
 }

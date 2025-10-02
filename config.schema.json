@@ -5,31 +5,35 @@
       "name": {
         "title": "Name",
         "type": "string",
-        "default": "sHome"
+        "default": "sHome",
+        "required": true
       },
       "username": {
         "title": "Username",
         "type": "string",
-        "description": "Your Samsung sHome account username."
+        "description": "Your Samsung sHome account username.",
+        "required": true
       },
       "password": {
         "title": "Password",
         "type": "string",
         "description": "Your Samsung sHome account password.",
-        "format": "password"
+        "format": "password",
+        "required": true
       },
       "deviceId": {
         "title": "Device ID",
         "type": "string",
-        "description": "Your mobile device ID."
+        "description": "Your mobile device ID.",
+        "required": true
+      },
+      "pollingInterval": {
+        "title": "Polling Interval (ms)",
+        "type": "integer",
+        "default": 3000,
+        "description": "The interval in milliseconds to poll for device status updates. Set to 0 to disable."
       }
-    },
-    "required": [
-      "name",
-      "username",
-      "password",
-      "deviceId"
-    ]
+    }
   },
   "pluginAlias": "sHome",
   "pluginType": "platform"

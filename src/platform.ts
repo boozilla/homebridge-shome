@@ -9,11 +9,17 @@ import { DoorlockAccessory } from './accessories/doorlockAccessory.js';
 const CONTROLLABLE_MULTI_DEVICE_TYPES = ['LIGHT', 'HEATER', 'VENTILATOR'];
 const SPECIAL_CONTROLLABLE_TYPES = ['DOORLOCK'];
 
+// Define a type for our accessory handlers
+type AccessoryHandler = LightAccessory | VentilatorAccessory | HeaterAccessory | DoorlockAccessory;
+
 export class ShomePlatform implements DynamicPlatformPlugin {
   public readonly Service: typeof Service;
   public readonly Characteristic: typeof Characteristic;
   public readonly accessories: PlatformAccessory[] = [];
   public readonly shomeClient: ShomeClient;
+  private readonly accessoryHandlers = new Map<string, AccessoryHandler>();
+  private pollingInterval: number;
+  private pollingTimer?: NodeJS.Timeout;
 
   constructor(
         public readonly log: Logger,
@@ -22,12 +28,11 @@ export class ShomePlatform implements DynamicPlatformPlugin {
   ) {
     this.Service = this.api.hap.Service;
     this.Characteristic = this.api.hap.Characteristic;
+    this.pollingInterval = this.config.pollingInterval ?? 3000;
 
-    // 1. Validate configuration
     if (!this.config.username || !this.config.password || !this.config.deviceId) {
       this.log.error('Missing required configuration. Please check your config.json file.');
       this.log.error('Required fields are: "username", "password", and "deviceId".');
-      // Prevent further initialization by not creating the client
       this.shomeClient = null!;
       return;
     }
@@ -40,8 +45,16 @@ export class ShomePlatform implements DynamicPlatformPlugin {
     );
 
     this.api.on('didFinishLaunching', () => {
-      // Defer device discovery until Homebridge is fully launched.
       this.discoverDevices();
+      if (this.pollingInterval > 0) {
+        this.startPolling();
+      }
+    });
+
+    this.api.on('shutdown', () => {
+      if (this.pollingTimer) {
+        clearInterval(this.pollingTimer);
+      }
     });
   }
 
@@ -50,23 +63,22 @@ export class ShomePlatform implements DynamicPlatformPlugin {
   }
 
   async discoverDevices() {
-    // Gracefully handle cases where the client was not initialized due to config errors
     if (!this.shomeClient) {
       return;
     }
 
     try {
+      this.log.info('Discovering devices...');
       const devices = await this.shomeClient.getDeviceList();
       const foundAccessories: PlatformAccessory[] = [];
 
       if (!devices || devices.length === 0) {
-        this.log.warn('No devices found on your sHome account. Please check your account or network connection.');
+        this.log.warn('No devices found on your sHome account.');
       }
 
       for (const device of devices) {
         if (CONTROLLABLE_MULTI_DEVICE_TYPES.includes(device.thngModelTypeName)) {
           const deviceInfoList = await this.shomeClient.getDeviceInfo(device.thngId, device.thngModelTypeName);
-
           if (deviceInfoList) {
             for (const subDevice of deviceInfoList) {
               const uuid = this.api.hap.uuid.generate(`${device.thngId}-${subDevice.deviceId}`);
@@ -90,10 +102,11 @@ export class ShomePlatform implements DynamicPlatformPlugin {
       if (accessoriesToRemove.length > 0) {
         this.log.info('Removing stale accessories:', accessoriesToRemove.map(a => a.displayName));
         this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, accessoriesToRemove);
+        accessoriesToRemove.forEach(acc => this.accessoryHandlers.delete(acc.UUID));
       }
+      this.log.info('Device discovery finished.');
     } catch (error) {
       this.log.error('Failed to discover devices due to a network or API error.');
-      this.log.error('Please check your network connection and sHome credentials. The plugin will not be able to control devices.');
     }
   }
 
@@ -120,19 +133,55 @@ export class ShomePlatform implements DynamicPlatformPlugin {
 
   createAccessory(accessory: PlatformAccessory) {
     const device = accessory.context.device;
-    switch (device.thngModelTypeName) {
-    case 'LIGHT':
-      new LightAccessory(this, accessory);
-      break;
-    case 'VENTILATOR':
-      new VentilatorAccessory(this, accessory);
-      break;
-    case 'HEATER':
-      new HeaterAccessory(this, accessory);
-      break;
-    case 'DOORLOCK':
-      new DoorlockAccessory(this, accessory);
-      break;
+    const accessoryType = device.thngModelTypeName;
+
+    if (!this.accessoryHandlers.has(accessory.UUID)) {
+      switch (accessoryType) {
+      case 'LIGHT':
+        this.accessoryHandlers.set(accessory.UUID, new LightAccessory(this, accessory));
+        break;
+      case 'VENTILATOR':
+        this.accessoryHandlers.set(accessory.UUID, new VentilatorAccessory(this, accessory));
+        break;
+      case 'HEATER':
+        this.accessoryHandlers.set(accessory.UUID, new HeaterAccessory(this, accessory));
+        break;
+      case 'DOORLOCK':
+        this.accessoryHandlers.set(accessory.UUID, new DoorlockAccessory(this, accessory));
+        break;
+      }
     }
+  }
+
+  startPolling() {
+    this.log.info(`Starting periodic device state polling every ${this.pollingInterval / 1000} seconds.`);
+    this.pollingTimer = setInterval(async () => {
+      this.log.debug('Polling for device updates...');
+      try {
+        const devices = await this.shomeClient.getDeviceList();
+        for (const device of devices) {
+          if (CONTROLLABLE_MULTI_DEVICE_TYPES.includes(device.thngModelTypeName)) {
+            const deviceInfoList = await this.shomeClient.getDeviceInfo(device.thngId, device.thngModelTypeName);
+            if (deviceInfoList) {
+              for (const subDevice of deviceInfoList) {
+                const subUuid = this.api.hap.uuid.generate(`${device.thngId}-${subDevice.deviceId}`);
+                const handler = this.accessoryHandlers.get(subUuid) as LightAccessory | HeaterAccessory | VentilatorAccessory;
+                if (handler) {
+                  handler.updateState(subDevice);
+                }
+              }
+            }
+          } else if (SPECIAL_CONTROLLABLE_TYPES.includes(device.thngModelTypeName)) {
+            const uuid = this.api.hap.uuid.generate(device.thngId);
+            const handler = this.accessoryHandlers.get(uuid) as DoorlockAccessory;
+            if (handler) {
+              handler.updateState(device);
+            }
+          }
+        }
+      } catch (error) {
+        this.log.error('An error occurred during polling:', error);
+      }
+    }, this.pollingInterval);
   }
 }

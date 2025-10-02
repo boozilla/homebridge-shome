@@ -1,5 +1,6 @@
 import { CharacteristicValue, PlatformAccessory, Service } from 'homebridge';
 import { ShomePlatform } from '../platform.js';
+import { SubDevice } from '../shomeClient.js';
 
 export class VentilatorAccessory {
   private fanService: Service;
@@ -89,6 +90,21 @@ export class VentilatorAccessory {
       this.accessory.context.subDevice.windSpeedMode = apiSpeed;
     } else {
       throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
+    }
+  }
+
+  async updateState(newSubDevice: SubDevice) {
+    const oldSubDevice = this.accessory.context.subDevice;
+    if (oldSubDevice.deviceStatus !== newSubDevice.deviceStatus) {
+      this.platform.log.info(`Updating state for ${this.accessory.displayName}: ${newSubDevice.deviceStatus ? 'ON' : 'OFF'}`);
+      this.fanService.updateCharacteristic(this.platform.Characteristic.Active, newSubDevice.deviceStatus === 1);
+    }
+    if (oldSubDevice.windSpeedMode !== newSubDevice.windSpeedMode) {
+      this.platform.log.info(`Updating rotation speed for ${this.accessory.displayName}`);
+      this.accessory.context.subDevice = newSubDevice;
+      this.fanService.updateCharacteristic(this.platform.Characteristic.RotationSpeed, await this.getRotationSpeed());
+    } else {
+      this.accessory.context.subDevice = newSubDevice;
     }
   }
 }

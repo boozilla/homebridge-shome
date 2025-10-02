@@ -1,5 +1,6 @@
 import { CharacteristicValue, PlatformAccessory, Service } from 'homebridge';
 import { ShomePlatform } from '../platform.js';
+import { MainDevice } from '../shomeClient.js';
 
 export class DoorlockAccessory {
   private service: Service;
@@ -55,6 +56,14 @@ export class DoorlockAccessory {
       setTimeout(() => {
         this.service.updateCharacteristic(this.platform.Characteristic.LockTargetState, this.platform.Characteristic.LockTargetState.SECURED);
       }, 1000);
+    }
+  }
+
+  async updateState(newDevice: MainDevice) {
+    if (this.accessory.context.device.status !== newDevice.status) {
+      this.platform.log.info(`Updating state for ${this.accessory.displayName}: ${newDevice.status ? 'SECURED' : 'UNSECURED'}`);
+      this.accessory.context.device = newDevice;
+      this.service.updateCharacteristic(this.platform.Characteristic.LockCurrentState, await this.getCurrentState());
     }
   }
 }

@@ -1,5 +1,6 @@
 import { CharacteristicValue, PlatformAccessory, Service } from 'homebridge';
 import { ShomePlatform } from '../platform.js';
+import { SubDevice } from '../shomeClient.js';
 
 export class HeaterAccessory {
   private service: Service;
@@ -42,7 +43,6 @@ export class HeaterAccessory {
 
         const thresholdCharacteristic = this.service.getCharacteristic(this.platform.Characteristic.HeatingThresholdTemperature);
 
-        // Prevent initial value error log by setting a valid default if the current value is out of bounds.
         const currentTargetTemp = this.accessory.context.subDevice.setTemp;
         if (currentTargetTemp < 5) {
           thresholdCharacteristic.updateValue(5);
@@ -81,11 +81,9 @@ export class HeaterAccessory {
     const subDevice = this.accessory.context.subDevice;
     const targetTemp = subDevice.setTemp;
 
-    // When the heater is off, the API might return 0. We should return a valid temp for HomeKit.
     if (subDevice.deviceStatus !== 1 || targetTemp < 5) {
-      return 24;
+      return 5;
     }
-
     return targetTemp;
   }
 
@@ -123,5 +121,23 @@ export class HeaterAccessory {
     } else {
       throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
     }
+  }
+
+  updateState(newSubDevice: SubDevice) {
+    const oldSubDevice = this.accessory.context.subDevice;
+    if (oldSubDevice.deviceStatus !== newSubDevice.deviceStatus) {
+      this.platform.log.info(`Updating state for ${this.accessory.displayName}: ${newSubDevice.deviceStatus ? 'ON' : 'OFF'}`);
+      this.service.updateCharacteristic(this.platform.Characteristic.Active, newSubDevice.deviceStatus === 1);
+    }
+    if (oldSubDevice.currentTemp !== newSubDevice.currentTemp) {
+      this.platform.log.info(`Updating current temperature for ${this.accessory.displayName}: ${newSubDevice.currentTemp}`);
+      this.service.updateCharacteristic(this.platform.Characteristic.CurrentTemperature, newSubDevice.currentTemp as number);
+    }
+    if (oldSubDevice.setTemp !== newSubDevice.setTemp) {
+      const newTemp = (newSubDevice.setTemp as number) < 5 ? 5 : (newSubDevice.setTemp as number);
+      this.platform.log.info(`Updating target temperature for ${this.accessory.displayName}: ${newTemp}`);
+      this.service.updateCharacteristic(this.platform.Characteristic.HeatingThresholdTemperature, newTemp);
+    }
+    this.accessory.context.subDevice = newSubDevice;
   }
 }
