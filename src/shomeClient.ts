@@ -28,6 +28,7 @@ type QueueTask<T = unknown> = {
     request: () => Promise<T>;
     resolve: (value: T | PromiseLike<T>) => void;
     reject: (reason?: unknown) => void;
+    deviceId?: string;
 };
 
 export class ShomeClient {
@@ -38,6 +39,7 @@ export class ShomeClient {
   private putQueue: QueueTask<any>[] = [];
   private isProcessingPut = false;
   private loginPromise: Promise<string | null> | null = null;
+  private pendingPutRequests = new Set<string>();
 
   constructor(
         private readonly log: Logger,
@@ -116,9 +118,9 @@ export class ShomeClient {
     }
   }
 
-  private enqueuePut<T>(request: () => Promise<T>): Promise<T> {
+  private enqueuePut<T>(request: () => Promise<T>, deviceId?: string): Promise<T> {
     return new Promise<T>((resolve, reject) => {
-      this.putQueue.push({ request, resolve, reject });
+      this.putQueue.push({ request, resolve, reject, deviceId });
       this.processPutQueue();
     });
   }
@@ -131,11 +133,18 @@ export class ShomeClient {
 
     while (this.putQueue.length > 0) {
       const task = this.putQueue.shift()!;
+      if (task.deviceId) {
+        this.pendingPutRequests.add(task.deviceId);
+      }
       try {
         const result = await this.executeWithRetries(task.request, true);
         task.resolve(result);
       } catch (error) {
         task.reject(error);
+      } finally {
+        if (task.deviceId) {
+          this.pendingPutRequests.delete(task.deviceId);
+        }
       }
       await new Promise(resolve => setTimeout(resolve, REQUEST_DELAY_MS));
     }
@@ -147,8 +156,6 @@ export class ShomeClient {
     let retries = 0;
     while (true) {
       try {
-        // For non-queued (concurrent) requests, we need to ensure login happens before the request.
-        // For queued requests, the login is handled as part of the queue, so we can just await it.
         if (!isQueued) {
           await this.login();
         }
@@ -174,10 +181,13 @@ export class ShomeClient {
         }
         await new Promise(resolve => setTimeout(resolve, backoffTime));
 
-        // After a failure, always ensure we are logged in before the next attempt.
         await this.login();
       }
     }
+  }
+
+  public isDeviceBusy(deviceId: string): boolean {
+    return this.pendingPutRequests.has(deviceId);
   }
 
   async getDeviceList(): Promise<MainDevice[]> {
@@ -219,19 +229,20 @@ export class ShomeClient {
     });
   }
 
-  async setDevice(thingId: string, deviceId: string, type: string, controlType: string, state: string, nickname?: string): Promise<boolean> {
-    return this.enqueuePut(async () => {
+  async setDevice(thingId: string, subDeviceId: string, type: string, controlType: string, state: string, nickname?: string): Promise<boolean> {
+    const deviceId = `${thingId}-${subDeviceId}`;
+    const request = async () => {
       const token = this.cachedAccessToken;
       if (!token) {
         return false;
       }
 
       const createDate = this.getDateTime();
-      const hashData = this.sha512(`IHRESTAPI${thingId}${deviceId}${state}${createDate}`);
+      const hashData = this.sha512(`IHRESTAPI${thingId}${subDeviceId}${state}${createDate}`);
       const typePath = type.toLowerCase().replace(/_/g, '');
       const controlPath = controlType.toLowerCase().replace(/_/g, '-');
 
-      await axios.put(`${BASE_URL}/v18/settings/${typePath}/${thingId}/${deviceId}/${controlPath}`, null, {
+      await axios.put(`${BASE_URL}/v18/settings/${typePath}/${thingId}/${subDeviceId}/${controlPath}`, null, {
         params: {
           createDate,
           [controlType === 'WINDSPEED' ? 'mode' : 'state']: state,
@@ -240,14 +251,17 @@ export class ShomeClient {
         headers: { 'Authorization': `Bearer ${token}` },
       });
 
-      const displayName = nickname || `${thingId}/${deviceId}`;
+      const displayName = nickname || deviceId;
       this.log.info(`[${displayName}] state set to ${state}.`);
       return true;
-    });
+    };
+
+    return this.enqueuePut(request, deviceId);
   }
 
   async unlockDoorlock(thingId: string, nickname?: string): Promise<boolean> {
-    return this.enqueuePut(async () => {
+    const deviceId = thingId;
+    const request = async () => {
       const token = this.cachedAccessToken;
       if (!token) {
         return false;
@@ -268,7 +282,8 @@ export class ShomeClient {
       const displayName = nickname || thingId;
       this.log.info(`Unlocked [${displayName}].`);
       return true;
-    });
+    };
+    return this.enqueuePut(request, deviceId);
   }
 
   private sha512(input: string): string {

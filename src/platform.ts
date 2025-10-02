@@ -164,7 +164,12 @@ export class ShomePlatform implements DynamicPlatformPlugin {
             const deviceInfoList = await this.shomeClient.getDeviceInfo(device.thngId, device.thngModelTypeName);
             if (deviceInfoList) {
               for (const subDevice of deviceInfoList) {
-                const subUuid = this.api.hap.uuid.generate(`${device.thngId}-${subDevice.deviceId}`);
+                const deviceId = `${device.thngId}-${subDevice.deviceId}`;
+                if (this.shomeClient.isDeviceBusy(deviceId)) {
+                  this.log.debug(`Skipping polling update for ${subDevice.nickname} as it has a pending request.`);
+                  continue;
+                }
+                const subUuid = this.api.hap.uuid.generate(deviceId);
                 const handler = this.accessoryHandlers.get(subUuid) as LightAccessory | HeaterAccessory | VentilatorAccessory;
                 if (handler) {
                   handler.updateState(subDevice);
@@ -172,7 +177,12 @@ export class ShomePlatform implements DynamicPlatformPlugin {
               }
             }
           } else if (SPECIAL_CONTROLLABLE_TYPES.includes(device.thngModelTypeName)) {
-            const uuid = this.api.hap.uuid.generate(device.thngId);
+            const deviceId = device.thngId;
+            if (this.shomeClient.isDeviceBusy(deviceId)) {
+              this.log.debug(`Skipping polling update for ${device.nickname} as it has a pending request.`);
+              continue;
+            }
+            const uuid = this.api.hap.uuid.generate(deviceId);
             const handler = this.accessoryHandlers.get(uuid) as DoorlockAccessory;
             if (handler) {
               handler.updateState(device);
