@@ -83,8 +83,9 @@ export class HeaterAccessory {
 
     // When the heater is off, the API might return 0. We should return a valid temp for HomeKit.
     if (subDevice.deviceStatus !== 1 || targetTemp < 5) {
-      return 5;
+      return 24;
     }
+
     return targetTemp;
   }
 

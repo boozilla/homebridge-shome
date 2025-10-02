@@ -8,6 +8,7 @@ const CHINA_APP_REGST_ID = 'SHOME==6110736314d9eef6baf393f3e43a5342f9ccde6ef300d
 const LANGUAGE = 'KOR';
 const MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 1000;
+const REQUEST_DELAY_MS = 300; // 각 API 요청 사이의 딜레이 (ms)
 
 // Define and export interfaces for device types
 export interface MainDevice {
@@ -67,6 +68,8 @@ export class ShomeClient {
       } catch (error) {
         task.reject(error);
       }
+      // Add a delay between requests to avoid overwhelming the server
+      await new Promise(resolve => setTimeout(resolve, REQUEST_DELAY_MS));
     }
 
     this.isProcessing = false;
