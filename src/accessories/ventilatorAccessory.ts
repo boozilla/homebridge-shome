@@ -5,29 +5,29 @@ export class VentilatorAccessory {
   private fanService: Service;
 
   constructor(
-    private readonly platform: ShomePlatform,
-    private readonly accessory: PlatformAccessory,
+        private readonly platform: ShomePlatform,
+        private readonly accessory: PlatformAccessory,
   ) {
     const device = this.accessory.context.device;
     const subDevice = this.accessory.context.subDevice;
 
-    this.accessory.getService(this.platform.Service.AccessoryInformation)!
-      .setCharacteristic(this.platform.Characteristic.Manufacturer, 'Samsung')
-      .setCharacteristic(this.platform.Characteristic.Model, 'Ventilator')
-      .setCharacteristic(this.platform.Characteristic.SerialNumber, `${device.thngId}-${subDevice.deviceId}`);
+        this.accessory.getService(this.platform.Service.AccessoryInformation)!
+          .setCharacteristic(this.platform.Characteristic.Manufacturer, 'Samsung')
+          .setCharacteristic(this.platform.Characteristic.Model, 'Ventilator')
+          .setCharacteristic(this.platform.Characteristic.SerialNumber, `${device.thngId}-${subDevice.deviceId}`);
 
-    this.fanService = this.accessory.getService(this.platform.Service.Fanv2) ||
-      this.accessory.addService(this.platform.Service.Fanv2);
+        this.fanService = this.accessory.getService(this.platform.Service.Fanv2) ||
+            this.accessory.addService(this.platform.Service.Fanv2);
 
-    this.fanService.setCharacteristic(this.platform.Characteristic.Name, subDevice.nickname);
+        this.fanService.setCharacteristic(this.platform.Characteristic.Name, subDevice.nickname);
 
-    this.fanService.getCharacteristic(this.platform.Characteristic.Active)
-      .onGet(this.getActive.bind(this))
-      .onSet(this.setActive.bind(this));
+        this.fanService.getCharacteristic(this.platform.Characteristic.Active)
+          .onGet(this.getActive.bind(this))
+          .onSet(this.setActive.bind(this));
 
-    this.fanService.getCharacteristic(this.platform.Characteristic.RotationSpeed)
-      .onGet(this.getRotationSpeed.bind(this))
-      .onSet(this.setRotationSpeed.bind(this));
+        this.fanService.getCharacteristic(this.platform.Characteristic.RotationSpeed)
+          .onGet(this.getRotationSpeed.bind(this))
+          .onSet(this.setRotationSpeed.bind(this));
   }
 
   async getActive(): Promise<CharacteristicValue> {
@@ -55,7 +55,7 @@ export class VentilatorAccessory {
     const subDevice = this.accessory.context.subDevice;
 
     const state = value === this.platform.Characteristic.Active.ACTIVE ? 'ON' : 'OFF';
-    const success = await this.platform.shomeClient.setDevice(device.thngId, subDevice.deviceId.toString(), 'VENTILATOR', 'ON_OFF', state);
+    const success = await this.platform.shomeClient.setDevice(device.thngId, subDevice.deviceId.toString(), 'VENTILATOR', 'ON_OFF', state, subDevice.nickname);
 
     if (success) {
       this.accessory.context.subDevice.deviceStatus = value === this.platform.Characteristic.Active.ACTIVE ? 1 : 0;
@@ -77,7 +77,7 @@ export class VentilatorAccessory {
       apiSpeed = 1;
     }
 
-    const success = await this.platform.shomeClient.setDevice(device.thngId, subDevice.deviceId.toString(), 'VENTILATOR', 'WINDSPEED', apiSpeed.toString());
+    const success = await this.platform.shomeClient.setDevice(device.thngId, subDevice.deviceId.toString(), 'VENTILATOR', 'WINDSPEED', apiSpeed.toString(), subDevice.nickname);
 
     if (success) {
       this.accessory.context.subDevice.windSpeedMode = apiSpeed;

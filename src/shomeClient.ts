@@ -9,16 +9,16 @@ const LANGUAGE = 'KOR';
 
 // Define and export interfaces for device types
 export interface MainDevice {
-  thngId: string;
-  thngModelTypeName: string;
-  nickname: string;
-  [key: string]: unknown;
+    thngId: string;
+    thngModelTypeName: string;
+    nickname: string;
+    [key: string]: unknown;
 }
 
 export interface SubDevice {
-  deviceId: string;
-  nickname: string;
-  [key: string]: unknown;
+    deviceId: string;
+    nickname: string;
+    [key: string]: unknown;
 }
 
 export class ShomeClient {
@@ -27,10 +27,10 @@ export class ShomeClient {
   private tokenExpiry: number = 0;
 
   constructor(
-    private readonly log: Logger,
-    private readonly username: string,
-    private readonly password: string,
-    private readonly deviceId: string,
+        private readonly log: Logger,
+        private readonly username: string,
+        private readonly password: string,
+        private readonly deviceId: string,
   ) {
   }
 
@@ -43,7 +43,7 @@ export class ShomeClient {
       const createDate = this.getDateTime();
       const hashedPassword = this.sha512(this.password);
       const hashData = this.sha512(`IHRESTAPI${this.username}${hashedPassword}${this.deviceId}` +
-        `${APP_REGST_ID}${CHINA_APP_REGST_ID}${LANGUAGE}${createDate}`);
+                `${APP_REGST_ID}${CHINA_APP_REGST_ID}${LANGUAGE}${createDate}`);
 
       const response = await axios.put(`${BASE_URL}/v18/users/login`, null, {
         params: {
@@ -123,7 +123,7 @@ export class ShomeClient {
     }
   }
 
-  async setDevice(thingId: string, deviceId: string, type: string, controlType: string, state: string): Promise<boolean> {
+  async setDevice(thingId: string, deviceId: string, type: string, controlType: string, state: string, nickname?: string): Promise<boolean> {
     const token = await this.login();
     if (!token) {
       return false;
@@ -144,15 +144,17 @@ export class ShomeClient {
         headers: { 'Authorization': `Bearer ${token}` },
       });
 
-      this.log.info(`Set ${type} [${thingId}/${deviceId}] to ${state}`);
+      const displayName = nickname || `${thingId}/${deviceId}`;
+      this.log.info(`[${displayName}] state set to ${state}.`);
       return true;
     } catch (error) {
-      this.log.error(`Error setting device ${thingId}: ${error}`);
+      const displayName = nickname || `${thingId}/${deviceId}`;
+      this.log.error(`Error setting device [${displayName}]: ${error}`);
       return false;
     }
   }
 
-  async unlockDoorlock(thingId: string): Promise<boolean> {
+  async unlockDoorlock(thingId: string, nickname?: string): Promise<boolean> {
     const token = await this.login();
     if (!token) {
       return false;
@@ -171,10 +173,12 @@ export class ShomeClient {
         headers: { 'Authorization': `Bearer ${token}` },
       });
 
-      this.log.info(`Unlocked doorlock [${thingId}]`);
+      const displayName = nickname || thingId;
+      this.log.info(`Unlocked [${displayName}].`);
       return true;
     } catch (error) {
-      this.log.error(`Error unlocking doorlock ${thingId}: ${error}`);
+      const displayName = nickname || thingId;
+      this.log.error(`Error unlocking [${displayName}]: ${error}`);
       return false;
     }
   }
@@ -191,6 +195,6 @@ export class ShomeClient {
     const now = new Date();
     const pad = (num: number) => num.toString().padStart(2, '0');
     return `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}` +
-      `${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}`;
+            `${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}`;
   }
 }
