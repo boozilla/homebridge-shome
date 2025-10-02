@@ -36,7 +36,8 @@ Add a new platform to the `platforms` array in your Homebridge `config.json` fil
       "name": "sHome",
       "username": "YOUR_SHOME_USERNAME",
       "password": "YOUR_SHOME_PASSWORD",
-      "deviceId": "YOUR_MOBILE_DEVICE_ID"
+      "deviceId": "YOUR_MOBILE_DEVICE_ID",
+      "pollingInterval": 3000
     }
   ]
 }
@@ -44,13 +45,14 @@ Add a new platform to the `platforms` array in your Homebridge `config.json` fil
 
 ### Configuration Fields
 
-| Key        | Description                                                                                                   | Required |
-|:-----------|:--------------------------------------------------------------------------------------------------------------|:---------|
-| `platform` | Must be set to **"sHome"**.                                                                                   | Yes      |
-| `name`     | The name of the platform that will appear in the Homebridge logs (e.g., "sHome").                             | Yes      |
-| `username` | Your Samsung sHome account username.                                                                          | Yes      |
-| `password` | Your Samsung sHome account password.                                                                          | Yes      |
-| `deviceId` | The unique ID of the mobile device where the sHome app is installed. This is required for API authentication. | Yes      |
+| Key               | Description                                                                                                   | Required |
+|:------------------|:--------------------------------------------------------------------------------------------------------------|:---------|
+| `platform`        | Must be set to **"sHome"**.                                                                                   | Yes      |
+| `name`            | The name of the platform that will appear in the Homebridge logs (e.g., "sHome").                             | Yes      |
+| `username`        | Your Samsung sHome account username.                                                                          | Yes      |
+| `password`        | Your Samsung sHome account password.                                                                          | Yes      |
+| `deviceId`        | The unique ID of the mobile device where the sHome app is installed. This is required for API authentication. | Yes      |
+| `pollingInterval` | The interval in milliseconds to poll for device status updates. Set to 0 to disable.                          | No       |
 
 **Note:** The `deviceId` can often be found by inspecting the sHome app's internal storage or by using specific tools to
 retrieve it. A correct value is essential for the API login to succeed.
