@@ -1,7 +1,7 @@
 {
   "name": "@boozilla/homebridge-shome",
   "displayName": "sHome Plugin",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "private": false,
   "description": "A Homebridge plugin for Samsung Smart Home",
   "author": "boozilla",
