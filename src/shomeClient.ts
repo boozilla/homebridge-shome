@@ -28,7 +28,6 @@ type QueueTask<T = unknown> = {
     request: () => Promise<T>;
     resolve: (value: T | PromiseLike<T>) => void;
     reject: (reason?: unknown) => void;
-    authRetry: boolean;
 };
 
 export class ShomeClient {
@@ -36,8 +35,9 @@ export class ShomeClient {
   private ihdId: string | null = null;
   private tokenExpiry: number = 0;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private requestQueue: QueueTask<any>[] = [];
-  private isProcessing = false;
+  private putQueue: QueueTask<any>[] = [];
+  private isProcessingPut = false;
+  private loginPromise: Promise<string | null> | null = null;
 
   constructor(
         private readonly log: Logger,
@@ -47,67 +47,30 @@ export class ShomeClient {
   ) {
   }
 
-  private enqueue<T>(request: () => Promise<T>): Promise<T> {
-    return new Promise<T>((resolve, reject) => {
-      this.requestQueue.push({ request, resolve, reject, authRetry: false });
-      this.processQueue();
+  private login(): Promise<string | null> {
+    if (!this.isTokenExpired()) {
+      return Promise.resolve(this.cachedAccessToken);
+    }
+
+    if (this.loginPromise) {
+      return this.loginPromise;
+    }
+
+    this.loginPromise = new Promise((resolve, reject) => {
+      this.putQueue.unshift({ // Prioritize login by adding to the front of the queue
+        request: () => this.performLogin(),
+        resolve,
+        reject,
+      });
+      this.processPutQueue();
     });
-  }
 
-  private async processQueue(): Promise<void> {
-    if (this.isProcessing) {
-      return; // A processing loop is already running
-    }
-    this.isProcessing = true;
+    // Clean up the promise once it's settled
+    this.loginPromise.finally(() => {
+      this.loginPromise = null;
+    });
 
-    while (this.requestQueue.length > 0) {
-      const task = this.requestQueue.shift()!;
-      try {
-        const result = await this.executeTaskWithRetries(task);
-        task.resolve(result);
-      } catch (error) {
-        task.reject(error);
-      }
-      // Add a delay between requests to avoid overwhelming the server
-      await new Promise(resolve => setTimeout(resolve, REQUEST_DELAY_MS));
-    }
-
-    this.isProcessing = false;
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private async executeTaskWithRetries(task: QueueTask<any>): Promise<any> {
-    let retries = 0;
-    while (true) {
-      try {
-        const result = await task.request();
-        return result;
-      } catch (error) {
-        const isAuthError = axios.isAxiosError(error) && error.response?.status === 401;
-
-        if (isAuthError && !task.authRetry) {
-          this.log.warn('API authentication failed (401). Retrying after refreshing token.');
-          this.cachedAccessToken = null;
-          this.tokenExpiry = 0;
-          task.authRetry = true;
-          continue; // Immediately retry the request
-        }
-
-        if (retries >= MAX_RETRIES) {
-          this.log.error(`Request failed after ${MAX_RETRIES} retries. Giving up.`, error);
-          throw error; // Throw final error
-        }
-
-        retries++;
-        const backoffTime = INITIAL_BACKOFF_MS * Math.pow(2, retries - 1);
-        this.log.warn(`Request failed. Retrying in ${backoffTime}ms... (Attempt ${retries}/${MAX_RETRIES})`);
-        await new Promise(resolve => setTimeout(resolve, backoffTime));
-      }
-    }
-  }
-
-  async login(): Promise<string | null> {
-    return this.enqueue(() => this.performLogin());
+    return this.loginPromise;
   }
 
   private async performLogin(): Promise<string | null> {
@@ -153,9 +116,73 @@ export class ShomeClient {
     }
   }
 
+  private enqueuePut<T>(request: () => Promise<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      this.putQueue.push({ request, resolve, reject });
+      this.processPutQueue();
+    });
+  }
+
+  private async processPutQueue(): Promise<void> {
+    if (this.isProcessingPut) {
+      return;
+    }
+    this.isProcessingPut = true;
+
+    while (this.putQueue.length > 0) {
+      const task = this.putQueue.shift()!;
+      try {
+        const result = await this.executeWithRetries(task.request, true);
+        task.resolve(result);
+      } catch (error) {
+        task.reject(error);
+      }
+      await new Promise(resolve => setTimeout(resolve, REQUEST_DELAY_MS));
+    }
+
+    this.isProcessingPut = false;
+  }
+
+  private async executeWithRetries<T>(request: () => Promise<T>, isQueued = false): Promise<T> {
+    let retries = 0;
+    while (true) {
+      try {
+        // For non-queued (concurrent) requests, we need to ensure login happens before the request.
+        // For queued requests, the login is handled as part of the queue, so we can just await it.
+        if (!isQueued) {
+          await this.login();
+        }
+        return await request();
+      } catch (error) {
+        const isAuthError = axios.isAxiosError(error) && error.response?.status === 401;
+
+        if (isAuthError) {
+          this.log.warn('API authentication failed (401). Invalidating token.');
+          this.cachedAccessToken = null;
+          this.tokenExpiry = 0;
+        }
+
+        if (retries >= MAX_RETRIES) {
+          this.log.error(`Request failed after ${MAX_RETRIES} retries. Giving up.`, error);
+          throw error;
+        }
+
+        retries++;
+        const backoffTime = INITIAL_BACKOFF_MS * Math.pow(2, retries - 1);
+        if (!isAuthError) {
+          this.log.warn(`Request failed. Retrying in ${backoffTime}ms... (Attempt ${retries}/${MAX_RETRIES})`);
+        }
+        await new Promise(resolve => setTimeout(resolve, backoffTime));
+
+        // After a failure, always ensure we are logged in before the next attempt.
+        await this.login();
+      }
+    }
+  }
+
   async getDeviceList(): Promise<MainDevice[]> {
-    return this.enqueue(async () => {
-      const token = await this.performLogin();
+    return this.executeWithRetries(async () => {
+      const token = this.cachedAccessToken;
       if (!token || !this.ihdId) {
         return [];
       }
@@ -173,8 +200,8 @@ export class ShomeClient {
   }
 
   async getDeviceInfo(thingId: string, type: string): Promise<SubDevice[] | null> {
-    return this.enqueue(async () => {
-      const token = await this.performLogin();
+    return this.executeWithRetries(async () => {
+      const token = this.cachedAccessToken;
       if (!token) {
         return null;
       }
@@ -193,8 +220,8 @@ export class ShomeClient {
   }
 
   async setDevice(thingId: string, deviceId: string, type: string, controlType: string, state: string, nickname?: string): Promise<boolean> {
-    return this.enqueue(async () => {
-      const token = await this.performLogin();
+    return this.enqueuePut(async () => {
+      const token = this.cachedAccessToken;
       if (!token) {
         return false;
       }
@@ -220,8 +247,8 @@ export class ShomeClient {
   }
 
   async unlockDoorlock(thingId: string, nickname?: string): Promise<boolean> {
-    return this.enqueue(async () => {
-      const token = await this.performLogin();
+    return this.enqueuePut(async () => {
+      const token = this.cachedAccessToken;
       if (!token) {
         return false;
       }
