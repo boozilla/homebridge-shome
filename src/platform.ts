@@ -16,12 +16,21 @@ export class ShomePlatform implements DynamicPlatformPlugin {
   public readonly shomeClient: ShomeClient;
 
   constructor(
-    public readonly log: Logger,
-    public readonly config: PlatformConfig,
-    public readonly api: API,
+        public readonly log: Logger,
+        public readonly config: PlatformConfig,
+        public readonly api: API,
   ) {
     this.Service = this.api.hap.Service;
     this.Characteristic = this.api.hap.Characteristic;
+
+    // 1. Validate configuration
+    if (!this.config.username || !this.config.password || !this.config.deviceId) {
+      this.log.error('Missing required configuration. Please check your config.json file.');
+      this.log.error('Required fields are: "username", "password", and "deviceId".');
+      // Prevent further initialization by not creating the client
+      this.shomeClient = null!;
+      return;
+    }
 
     this.shomeClient = new ShomeClient(
       this.log,
@@ -31,6 +40,7 @@ export class ShomePlatform implements DynamicPlatformPlugin {
     );
 
     this.api.on('didFinishLaunching', () => {
+      // Defer device discovery until Homebridge is fully launched.
       this.discoverDevices();
     });
   }
@@ -40,35 +50,50 @@ export class ShomePlatform implements DynamicPlatformPlugin {
   }
 
   async discoverDevices() {
-    const devices = await this.shomeClient.getDeviceList();
-    const foundAccessories: PlatformAccessory[] = [];
-
-    for (const device of devices) {
-      if (CONTROLLABLE_MULTI_DEVICE_TYPES.includes(device.thngModelTypeName)) {
-        const deviceInfoList = await this.shomeClient.getDeviceInfo(device.thngId, device.thngModelTypeName);
-
-        if (deviceInfoList) {
-          for (const subDevice of deviceInfoList) {
-            const uuid = this.api.hap.uuid.generate(`${device.thngId}-${subDevice.deviceId}`);
-            const accessory = this.setupAccessory(device, subDevice, uuid);
-            foundAccessories.push(accessory);
-          }
-        }
-      } else if (SPECIAL_CONTROLLABLE_TYPES.includes(device.thngModelTypeName)) {
-        const uuid = this.api.hap.uuid.generate(device.thngId);
-        const accessory = this.setupAccessory(device, null, uuid);
-        foundAccessories.push(accessory);
-      } else {
-        this.log.info(`Ignoring device: ${device.nickname} (Type: ${device.thngModelTypeName})`);
-      }
+    // Gracefully handle cases where the client was not initialized due to config errors
+    if (!this.shomeClient) {
+      return;
     }
 
-    const accessoriesToRemove = this.accessories.filter(cachedAccessory =>
-      !foundAccessories.some(foundAccessory => foundAccessory.UUID === cachedAccessory.UUID),
-    );
-    if (accessoriesToRemove.length > 0) {
-      this.log.info('Removing stale accessories:', accessoriesToRemove.map(a => a.displayName));
-      this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, accessoriesToRemove);
+    try {
+      const devices = await this.shomeClient.getDeviceList();
+      const foundAccessories: PlatformAccessory[] = [];
+
+      if (!devices || devices.length === 0) {
+        this.log.warn('No devices found on your sHome account. Please check your account or network connection.');
+      }
+
+      for (const device of devices) {
+        if (CONTROLLABLE_MULTI_DEVICE_TYPES.includes(device.thngModelTypeName)) {
+          const deviceInfoList = await this.shomeClient.getDeviceInfo(device.thngId, device.thngModelTypeName);
+
+          if (deviceInfoList) {
+            for (const subDevice of deviceInfoList) {
+              const uuid = this.api.hap.uuid.generate(`${device.thngId}-${subDevice.deviceId}`);
+              const accessory = this.setupAccessory(device, subDevice, uuid);
+              foundAccessories.push(accessory);
+            }
+          }
+        } else if (SPECIAL_CONTROLLABLE_TYPES.includes(device.thngModelTypeName)) {
+          const uuid = this.api.hap.uuid.generate(device.thngId);
+          const accessory = this.setupAccessory(device, null, uuid);
+          foundAccessories.push(accessory);
+        } else {
+          this.log.info(`Ignoring device: ${device.nickname} (Type: ${device.thngModelTypeName})`);
+        }
+      }
+
+      const accessoriesToRemove = this.accessories.filter(cachedAccessory =>
+        !foundAccessories.some(foundAccessory => foundAccessory.UUID === cachedAccessory.UUID),
+      );
+
+      if (accessoriesToRemove.length > 0) {
+        this.log.info('Removing stale accessories:', accessoriesToRemove.map(a => a.displayName));
+        this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, accessoriesToRemove);
+      }
+    } catch (error) {
+      this.log.error('Failed to discover devices due to a network or API error.');
+      this.log.error('Please check your network connection and sHome credentials. The plugin will not be able to control devices.');
     }
   }
 
