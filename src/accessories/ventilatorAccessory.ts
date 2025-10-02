@@ -41,7 +41,6 @@ export class VentilatorAccessory {
     const subDevice = this.accessory.context.subDevice;
     const apiSpeed = subDevice.windSpeedMode; // 1, 2, 3
 
-    // sHome API (1:강, 2:중, 3:약) -> HomeKit % (100:강, 66:중, 33:약)
     if (apiSpeed === 1) {
       return 100;
     } else if (apiSpeed === 2) {
@@ -56,7 +55,13 @@ export class VentilatorAccessory {
     const subDevice = this.accessory.context.subDevice;
 
     const state = value === this.platform.Characteristic.Active.ACTIVE ? 'ON' : 'OFF';
-    await this.platform.shomeClient.setDevice(device.thngId, subDevice.deviceId.toString(), 'VENTILATOR', 'ON_OFF', state);
+    const success = await this.platform.shomeClient.setDevice(device.thngId, subDevice.deviceId.toString(), 'VENTILATOR', 'ON_OFF', state);
+
+    if (success) {
+      this.accessory.context.subDevice.deviceStatus = value === this.platform.Characteristic.Active.ACTIVE ? 1 : 0;
+    } else {
+      throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
+    }
   }
 
   async setRotationSpeed(value: CharacteristicValue) {
@@ -64,7 +69,6 @@ export class VentilatorAccessory {
     const subDevice = this.accessory.context.subDevice;
     const numericValue = Number(value);
 
-    // HomeKit % -> sHome API (1:강, 2:중, 3:약)
     let apiSpeed = 3;
     if (numericValue > 33) {
       apiSpeed = 2;
@@ -73,6 +77,12 @@ export class VentilatorAccessory {
       apiSpeed = 1;
     }
 
-    await this.platform.shomeClient.setDevice(device.thngId, subDevice.deviceId.toString(), 'VENTILATOR', 'WINDSPEED', apiSpeed.toString());
+    const success = await this.platform.shomeClient.setDevice(device.thngId, subDevice.deviceId.toString(), 'VENTILATOR', 'WINDSPEED', apiSpeed.toString());
+
+    if (success) {
+      this.accessory.context.subDevice.windSpeedMode = apiSpeed;
+    } else {
+      throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
+    }
   }
 }

@@ -29,7 +29,6 @@ export class HeaterAccessory {
       .onGet(this.getCurrentState.bind(this));
 
     this.service.getCharacteristic(this.platform.Characteristic.TargetHeaterCoolerState)
-      // 버그 수정: validValues를 HEAT로만 설정하여 다른 모드(냉방, 자동)를 UI에서 제거
       .setProps({
         validValues: [this.platform.Characteristic.TargetHeaterCoolerState.HEAT],
       })
@@ -44,8 +43,6 @@ export class HeaterAccessory {
       .onGet(this.getTargetTemperature.bind(this))
       .onSet(this.setTargetTemperature.bind(this));
   }
-
-  // ... (이하 다른 함수들은 이전과 동일)
 
   async getActive(): Promise<CharacteristicValue> {
     const subDevice = this.accessory.context.subDevice;
@@ -79,16 +76,28 @@ export class HeaterAccessory {
     const device = this.accessory.context.device;
     const subDevice = this.accessory.context.subDevice;
     const state = value === this.platform.Characteristic.Active.ACTIVE ? 'ON' : 'OFF';
-    await this.platform.shomeClient.setDevice(device.thngId, subDevice.deviceId.toString(), 'HEATER', 'ON_OFF', state);
+    const success = await this.platform.shomeClient.setDevice(device.thngId, subDevice.deviceId.toString(), 'HEATER', 'ON_OFF', state);
+
+    if (success) {
+      this.accessory.context.subDevice.deviceStatus = value === this.platform.Characteristic.Active.ACTIVE ? 1 : 0;
+    } else {
+      throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
+    }
   }
 
   async setTargetState() {
-    // 이 함수는 setProps로 인해 HEAT 값만 받게 되므로 별도 처리가 불필요합니다.
+    // This function does not require separate processing as it only accepts HEAT values due to setProps.
   }
 
   async setTargetTemperature(value: CharacteristicValue) {
     const device = this.accessory.context.device;
     const subDevice = this.accessory.context.subDevice;
-    await this.platform.shomeClient.setDevice(device.thngId, subDevice.deviceId.toString(), 'HEATER', 'TEMPERATURE', value.toString());
+    const success = await this.platform.shomeClient.setDevice(device.thngId, subDevice.deviceId.toString(), 'HEATER', 'TEMPERATURE', value.toString());
+
+    if (success) {
+      this.accessory.context.subDevice.setTemp = value as number;
+    } else {
+      throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
+    }
   }
 }

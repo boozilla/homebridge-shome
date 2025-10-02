@@ -36,6 +36,14 @@ export class LightAccessory {
     const subDevice = this.accessory.context.subDevice;
 
     const state = value ? 'ON' : 'OFF';
-    await this.platform.shomeClient.setDevice(device.thngId, subDevice.deviceId.toString(), 'LIGHT', 'ON_OFF', state);
+    const success = await this.platform.shomeClient.setDevice(device.thngId, subDevice.deviceId.toString(), 'LIGHT', 'ON_OFF', state);
+
+    if (success) {
+      this.accessory.context.subDevice.deviceStatus = value ? 1 : 0;
+      this.platform.log.info(`[${subDevice.nickname}] state set to ${state}.`);
+    } else {
+      this.platform.log.error(`[${subDevice.nickname}] failed to set state.`);
+      throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
+    }
   }
 }
