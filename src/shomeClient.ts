@@ -6,6 +6,8 @@ const BASE_URL = 'https://shome-api.samsung-ihp.com';
 const APP_REGST_ID = '6110736314d9eef6baf393f3e43a5342f9ccde6ef300d878385acd9264cf14d5';
 const CHINA_APP_REGST_ID = 'SHOME==6110736314d9eef6baf393f3e43a5342f9ccde6ef300d878385acd9264cf14d5';
 const LANGUAGE = 'KOR';
+const MAX_RETRIES = 3;
+const INITIAL_BACKOFF_MS = 1000;
 
 // Define and export interfaces for device types
 export interface MainDevice {
@@ -21,10 +23,20 @@ export interface SubDevice {
     [key: string]: unknown;
 }
 
+type QueueTask<T = unknown> = {
+    request: () => Promise<T>;
+    resolve: (value: T | PromiseLike<T>) => void;
+    reject: (reason?: unknown) => void;
+    authRetry: boolean;
+};
+
 export class ShomeClient {
   private cachedAccessToken: string | null = null;
   private ihdId: string | null = null;
   private tokenExpiry: number = 0;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private requestQueue: QueueTask<any>[] = [];
+  private isProcessing = false;
 
   constructor(
         private readonly log: Logger,
@@ -34,7 +46,60 @@ export class ShomeClient {
   ) {
   }
 
+  private async enqueue<T>(request: () => Promise<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      this.requestQueue.push({ request, resolve, reject, authRetry: false });
+      if (!this.isProcessing) {
+        this.processQueue();
+      }
+    });
+  }
+
+  private async processQueue(): Promise<void> {
+    if (this.isProcessing || this.requestQueue.length === 0) {
+      return;
+    }
+    this.isProcessing = true;
+    const task = this.requestQueue.shift()!;
+    let retries = 0;
+
+    const execute = async () => {
+      try {
+        const result = await task.request();
+        task.resolve(result);
+        this.isProcessing = false;
+        this.processQueue();
+      } catch (error) {
+        const isAuthError = axios.isAxiosError(error) && error.response?.status === 401;
+
+        if (isAuthError && !task.authRetry) {
+          this.log.warn('API authentication failed (401). Retrying after refreshing token.');
+          this.cachedAccessToken = null;
+          this.tokenExpiry = 0;
+          task.authRetry = true;
+          setTimeout(execute, 100);
+        } else if (!isAuthError && retries < MAX_RETRIES) {
+          retries++;
+          const backoffTime = INITIAL_BACKOFF_MS * Math.pow(2, retries - 1);
+          this.log.warn(`Request failed. Retrying in ${backoffTime}ms... (Attempt ${retries}/${MAX_RETRIES})`);
+          setTimeout(execute, backoffTime);
+        } else {
+          this.log.error(`Request failed after ${MAX_RETRIES} retries.`, error);
+          task.reject(error);
+          this.isProcessing = false;
+          this.processQueue();
+        }
+      }
+    };
+
+    await execute();
+  }
+
   async login(): Promise<string | null> {
+    return this.enqueue(() => this.performLogin());
+  }
+
+  private async performLogin(): Promise<string | null> {
     if (!this.isTokenExpired()) {
       return this.cachedAccessToken;
     }
@@ -62,7 +127,6 @@ export class ShomeClient {
         this.cachedAccessToken = response.data.accessToken;
         this.ihdId = response.data.ihdId;
 
-        // Decode token to find expiry
         const payload = JSON.parse(Buffer.from(this.cachedAccessToken!.split('.')[1], 'base64').toString());
         this.tokenExpiry = payload.exp * 1000;
 
@@ -74,17 +138,17 @@ export class ShomeClient {
       }
     } catch (error) {
       this.log.error(`Login error: ${error}`);
-      return null;
+      throw error;
     }
   }
 
   async getDeviceList(): Promise<MainDevice[]> {
-    const token = await this.login();
-    if (!token || !this.ihdId) {
-      return [];
-    }
+    return this.enqueue(async () => {
+      const token = await this.performLogin();
+      if (!token || !this.ihdId) {
+        return [];
+      }
 
-    try {
       const createDate = this.getDateTime();
       const hashData = this.sha512(`IHRESTAPI${this.ihdId}${createDate}`);
 
@@ -92,21 +156,17 @@ export class ShomeClient {
         params: { createDate, hashData },
         headers: { 'Authorization': `Bearer ${token}` },
       });
-
       return response.data.deviceList || [];
-    } catch (error) {
-      this.log.error(`Error getting device list: ${error}`);
-      return [];
-    }
+    });
   }
 
   async getDeviceInfo(thingId: string, type: string): Promise<SubDevice[] | null> {
-    const token = await this.login();
-    if (!token) {
-      return null;
-    }
+    return this.enqueue(async () => {
+      const token = await this.performLogin();
+      if (!token) {
+        return null;
+      }
 
-    try {
       const createDate = this.getDateTime();
       const hashData = this.sha512(`IHRESTAPI${thingId}${createDate}`);
       const typePath = type.toLowerCase().replace(/_/g, '');
@@ -115,21 +175,17 @@ export class ShomeClient {
         params: { createDate, hashData },
         headers: { 'Authorization': `Bearer ${token}` },
       });
-
       return response.data.deviceInfoList || null;
-    } catch (error) {
-      this.log.error(`Error getting device info for ${thingId}: ${error}`);
-      return null;
-    }
+    });
   }
 
   async setDevice(thingId: string, deviceId: string, type: string, controlType: string, state: string, nickname?: string): Promise<boolean> {
-    const token = await this.login();
-    if (!token) {
-      return false;
-    }
+    return this.enqueue(async () => {
+      const token = await this.performLogin();
+      if (!token) {
+        return false;
+      }
 
-    try {
       const createDate = this.getDateTime();
       const hashData = this.sha512(`IHRESTAPI${thingId}${deviceId}${state}${createDate}`);
       const typePath = type.toLowerCase().replace(/_/g, '');
@@ -147,20 +203,16 @@ export class ShomeClient {
       const displayName = nickname || `${thingId}/${deviceId}`;
       this.log.info(`[${displayName}] state set to ${state}.`);
       return true;
-    } catch (error) {
-      const displayName = nickname || `${thingId}/${deviceId}`;
-      this.log.error(`Error setting device [${displayName}]: ${error}`);
-      return false;
-    }
+    });
   }
 
   async unlockDoorlock(thingId: string, nickname?: string): Promise<boolean> {
-    const token = await this.login();
-    if (!token) {
-      return false;
-    }
+    return this.enqueue(async () => {
+      const token = await this.performLogin();
+      if (!token) {
+        return false;
+      }
 
-    try {
       const createDate = this.getDateTime();
       const hashData = this.sha512(`IHRESTAPI${thingId}${createDate}`);
 
@@ -176,11 +228,7 @@ export class ShomeClient {
       const displayName = nickname || thingId;
       this.log.info(`Unlocked [${displayName}].`);
       return true;
-    } catch (error) {
-      const displayName = nickname || thingId;
-      this.log.error(`Error unlocking [${displayName}]: ${error}`);
-      return false;
-    }
+    });
   }
 
   private sha512(input: string): string {
