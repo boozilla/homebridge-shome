@@ -24,6 +24,13 @@ export interface SubDevice {
     [key: string]: unknown;
 }
 
+export interface Visitor {
+    sttId: string;
+    thumbNail: string;
+    recodDt: string;
+    deviceLabel: string;
+}
+
 type QueueTask<T = unknown> = {
     request: () => Promise<T>;
     resolve: (value: T | PromiseLike<T>) => void;
@@ -34,6 +41,7 @@ type QueueTask<T = unknown> = {
 export class ShomeClient {
   private cachedAccessToken: string | null = null;
   private ihdId: string | null = null;
+  private homeId: string | null = null;
   private tokenExpiry: number = 0;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private putQueue: QueueTask<any>[] = [];
@@ -102,6 +110,7 @@ export class ShomeClient {
       if (response.data && response.data.accessToken) {
         this.cachedAccessToken = response.data.accessToken;
         this.ihdId = response.data.ihdId;
+        this.homeId = response.data.homeId;
 
         const payload = JSON.parse(Buffer.from(this.cachedAccessToken!.split('.')[1], 'base64').toString());
         this.tokenExpiry = payload.exp * 1000;
@@ -285,6 +294,27 @@ export class ShomeClient {
     };
     return this.enqueuePut(request, deviceId);
   }
+
+  async getVisitorHistory(): Promise<Visitor[]> {
+    return this.executeWithRetries(async () => {
+      const token = this.cachedAccessToken;
+      if (!token || !this.homeId) {
+        this.log.error('Cannot fetch visitor history: Not logged in or homeId is missing.');
+        return [];
+      }
+
+      const createDate = this.getDateTime();
+      const offset = 0;
+      const hashData = this.sha512(`IHRESTAPI${this.homeId}${offset}${createDate}`);
+      const response = await axios.get(`${BASE_URL}/v16/histories/${this.homeId}/video-histories`, {
+        params: { createDate, hashData, offset },
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+
+      return response.data.videoList || [];
+    });
+  }
+
 
   private sha512(input: string): string {
     return CryptoJS.SHA512(input).toString();
