@@ -17,6 +17,7 @@ door locks, using the Home app and Siri on your Apple devices.
 * **Digital Door Lock**: Check the current state of your door lock (locked/unlocked) and unlock it remotely.
 * **Individual Accessory Support**: Each sub-device registered in your system, such as 'Living Room Light' or 'Master
   Bedroom Thermostat', is added as an independent HomeKit accessory for granular control.
+* **Visitor Notifications**: Automatically creates a "Visitor Alert" motion sensor in HomeKit. When a new visitor is detected, this sensor is triggered, sending a notification to your Apple devices (if you have notifications enabled for the sensor in the Home app).
 
 ## Installation
 
