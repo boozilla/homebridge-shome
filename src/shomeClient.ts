@@ -315,6 +315,37 @@ export class ShomeClient {
     });
   }
 
+  async getThumbnailImage(visitor: Visitor): Promise<Buffer | null> {
+    const request = async () => {
+      const token = this.cachedAccessToken;
+      if (!token) {
+        this.log.error('Cannot fetch thumbnail: Not logged in.');
+        return null;
+      }
+
+      if (!visitor.sttId) {
+        this.log.error('Cannot fetch thumbnail: sttId is missing from visitor object.');
+        return null;
+      }
+
+      const createDate = this.getDateTime();
+      const hashData = this.sha512(`IHRESTAPI${visitor.sttId}${createDate}`);
+      const thumbnailUrl = `${BASE_URL}/v16/histories/${visitor.sttId}/video-thumbnail`;
+      const response = await axios.get(thumbnailUrl, {
+        params: {
+          createDate,
+          hashData,
+        },
+        headers: { 'Authorization': `Bearer ${token}` },
+        responseType: 'arraybuffer',
+      });
+
+      return Buffer.from(response.data, 'binary');
+    };
+
+    return this.executeWithRetries(request);
+  }
+
 
   private sha512(input: string): string {
     return CryptoJS.SHA512(input).toString();

@@ -18,9 +18,9 @@ export class ShomePlatform implements DynamicPlatformPlugin {
   public readonly accessories: PlatformAccessory[] = [];
   public readonly shomeClient: ShomeClient;
   private readonly accessoryHandlers = new Map<string, AccessoryHandler>();
-  private readonly pollingInterval: number;
-
+  private pollingInterval: number;
   private pollingTimer?: NodeJS.Timeout;
+
   private lastCheckedTimestamp: Date = new Date();
 
   constructor(
@@ -46,7 +46,7 @@ export class ShomePlatform implements DynamicPlatformPlugin {
       this.config.deviceId,
     );
 
-    this.log.info(`Doorbell notification service is active. Baseline time: ${this.lastCheckedTimestamp.toISOString()}`);
+    this.log.info(`Video Doorbell service is active. Baseline time: ${this.lastCheckedTimestamp.toISOString()}`);
 
     this.api.on('didFinishLaunching', () => {
       this.discoverDevices();
@@ -93,7 +93,7 @@ export class ShomePlatform implements DynamicPlatformPlugin {
         }
       }
 
-      const doorbellUUID = this.api.hap.uuid.generate('shome-doorbell-accessory');
+      const doorbellUUID = this.api.hap.uuid.generate('shome-doorbell');
       const doorbellDevice = { thngModelTypeName: 'DOORBELL', nickname: 'Doorbell', thngId: 'shome-doorbell' } as MainDevice;
       const doorbellAccessory = this.setupAccessory(doorbellDevice, null, doorbellUUID);
       foundAccessories.push(doorbellAccessory);
@@ -228,12 +228,12 @@ export class ShomePlatform implements DynamicPlatformPlugin {
       this.log.info(`Found ${newVisitors.length} new doorbell event(s).`);
       newVisitors.sort((a, b) => a.recodDt.localeCompare(b.recodDt));
 
-      const doorbellUUID = this.api.hap.uuid.generate('shome-doorbell-accessory');
+      const doorbellUUID = this.api.hap.uuid.generate('shome-doorbell');
       const doorbellHandler = this.accessoryHandlers.get(doorbellUUID) as DoorbellAccessory | undefined;
 
       if (doorbellHandler) {
         for (const visitor of newVisitors) {
-          doorbellHandler.ring(visitor.deviceLabel);
+          doorbellHandler.newVisitor(visitor);
         }
       } else {
         this.log.warn('Doorbell accessory handler not found.');
