@@ -43,19 +43,20 @@ export class ShomeCameraController implements CameraStreamingDelegate {
       },
     });
 
-    const cameraOperatingMode = this.accessory.getService(this.hap.Service.CameraOperatingMode)
-            || this.accessory.addService(this.hap.Service.CameraOperatingMode, this.accessory.displayName + ' Mode');
-
+    let cameraOperatingMode = this.accessory.getService(this.hap.Service.CameraOperatingMode);
+    if (!cameraOperatingMode) {
+      cameraOperatingMode = this.accessory.addService(this.hap.Service.CameraOperatingMode, this.accessory.displayName + ' Mode');
+    }
     cameraOperatingMode.setCharacteristic(this.hap.Characteristic.EventSnapshotsActive, this.hap.Characteristic.EventSnapshotsActive.ENABLE);
 
-    this.accessory.getService(this.hap.Service.CameraRTPStreamManagement)
-        || this.accessory.addService(this.hap.Service.CameraRTPStreamManagement, this.accessory.displayName + ' Stream Management');
+    if (!this.accessory.getService(this.hap.Service.CameraRTPStreamManagement)) {
+      this.accessory.addService(this.hap.Service.CameraRTPStreamManagement, this.accessory.displayName + ' Stream Management');
+    }
   }
 
   public async handleSnapshotRequest(request: SnapshotRequest, callback: SnapshotRequestCallback): Promise<void> {
     this.log.info('Handling snapshot request...');
 
-    // ✨ 핵심 수정: 플레이스홀더 로직을 제거하고, 데이터가 없을 때 에러를 반환합니다.
     if (!this.latestVisitor) {
       this.log.warn('No visitor data available for snapshot. This will result in a "No Response" error until the first doorbell event.');
       return callback(new Error('No snapshot available'));
