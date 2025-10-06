@@ -11,12 +11,10 @@ import {
   PrepareStreamResponse,
   SnapshotRequest,
   SnapshotRequestCallback,
-  SRTPCryptoSuites,
   StartStreamRequest,
   StreamRequestCallback,
   StreamRequestTypes,
   StreamingRequest,
-  VideoInfo,
 } from 'homebridge';
 import { ShomePlatform } from '../platform.js';
 import { Visitor } from '../shomeClient.js';
