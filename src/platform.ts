@@ -1,17 +1,19 @@
 import { API, Characteristic, DynamicPlatformPlugin, Logger, PlatformAccessory, PlatformConfig, Service } from 'homebridge';
 import { PLATFORM_NAME, PLUGIN_NAME } from './settings.js';
-import { ShomeClient, MainDevice, SubDevice, Visitor, ParkingEvent } from './shomeClient.js';
+import { ShomeClient, MainDevice, SubDevice, Visitor, ParkingEvent, MaintenanceFeeData } from './shomeClient.js';
 import { LightAccessory } from './accessories/lightAccessory.js';
 import { VentilatorAccessory } from './accessories/ventilatorAccessory.js';
 import { HeaterAccessory } from './accessories/heaterAccessory.js';
 import { DoorlockAccessory } from './accessories/doorlockAccessory.js';
 import { DoorbellAccessory } from './accessories/doorbellAccessory.js';
 import { ParkingAccessory } from './accessories/parkingAccessory.js';
+import { MaintenanceFeeAccessory } from './accessories/maintenanceFeeAccessory.js';
 
 const CONTROLLABLE_MULTI_DEVICE_TYPES = ['LIGHT', 'HEATER', 'VENTILATOR'];
 const SPECIAL_CONTROLLABLE_TYPES = ['DOORLOCK'];
 
-type AccessoryHandler = LightAccessory | VentilatorAccessory | HeaterAccessory | DoorlockAccessory | DoorbellAccessory | ParkingAccessory;
+type AccessoryHandler = LightAccessory | VentilatorAccessory | HeaterAccessory |
+    DoorlockAccessory | DoorbellAccessory | ParkingAccessory | MaintenanceFeeAccessory;
 
 export class ShomePlatform implements DynamicPlatformPlugin {
   public readonly Service: typeof Service;
@@ -24,6 +26,7 @@ export class ShomePlatform implements DynamicPlatformPlugin {
 
   private lastCheckedTimestamp: Date = new Date();
   private lastCheckedParkingTimestamp: Date = new Date();
+  private lastCheckedMaintenanceFeeMonth: string | null = null;
 
   constructor(
         public readonly log: Logger,
@@ -111,6 +114,11 @@ export class ShomePlatform implements DynamicPlatformPlugin {
       const parkingAccessory = this.setupAccessory(parkingDevice, null, parkingUUID);
       foundAccessories.push(parkingAccessory);
 
+      const feeUUID = this.api.hap.uuid.generate('shome-maintenance-fee');
+      const feeDevice = { thngModelTypeName: 'MAINTENANCE_FEE', nickname: 'Maintenance Fee', thngId: 'shome-maintenance-fee' } as MainDevice;
+      const feeAccessory = this.setupAccessory(feeDevice, null, feeUUID);
+      foundAccessories.push(feeAccessory);
+
       const accessoriesToRemove = this.accessories.filter(cachedAccessory =>
         !foundAccessories.some(foundAccessory => foundAccessory.UUID === cachedAccessory.UUID),
       );
@@ -178,6 +186,9 @@ export class ShomePlatform implements DynamicPlatformPlugin {
     case 'PARKING':
       this.accessoryHandlers.set(accessory.UUID, new ParkingAccessory(this, accessory));
       break;
+    case 'MAINTENANCE_FEE':
+      this.accessoryHandlers.set(accessory.UUID, new MaintenanceFeeAccessory(this, accessory));
+      break;
     }
   }
 
@@ -189,6 +200,7 @@ export class ShomePlatform implements DynamicPlatformPlugin {
         await this.pollDeviceUpdates();
         await this.checkForNewVisitors();
         await this.checkForNewParkingEvents();
+        await this.checkForNewMaintenanceFee();
       } catch (error) {
         this.log.error('An error occurred during polling:', error);
       }
@@ -294,6 +306,88 @@ export class ShomePlatform implements DynamicPlatformPlugin {
       const latestEvent = newParkingEvents[newParkingEvents.length - 1];
       this.lastCheckedParkingTimestamp = new Date(latestEvent.park_date);
       this.log.debug(`Updated last checked parking timestamp to: ${this.lastCheckedParkingTimestamp.toISOString()}`);
+    }
+  }
+
+  async checkForNewMaintenanceFee() {
+    this.log.debug('Checking for new maintenance fee...');
+
+    if (!this.lastCheckedMaintenanceFeeMonth) {
+      this.log.debug('First run for maintenance fee check. Finding the latest available data...');
+      const now = new Date();
+      let initialFeeData: MaintenanceFeeData | null = null;
+      let initialYear = now.getFullYear();
+      let initialMonth = now.getMonth() + 1;
+
+      for (let i = 0; i < 3; i++) {
+        const feeData = await this.shomeClient.getMaintenanceFee(initialYear, initialMonth);
+        if (feeData && feeData.expense_total && feeData.expense_total.length > 0 && feeData.expense_total[0].money > 0) {
+          initialFeeData = feeData;
+          break;
+        }
+
+        initialMonth--;
+        if (initialMonth === 0) {
+          initialMonth = 12;
+          initialYear--;
+        }
+      }
+
+      if (initialFeeData) {
+        const monthStr = `${initialFeeData.search_year}-${initialFeeData.search_month}`;
+        this.log.info(`Found initial latest maintenance fee data for ${monthStr}.`);
+        this.lastCheckedMaintenanceFeeMonth = monthStr;
+      } else {
+        this.log.debug('Could not find any maintenance fee data for the last 3 months on first run.');
+
+        const twoMonthsAgo = new Date();
+        twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
+        this.lastCheckedMaintenanceFeeMonth = `${twoMonthsAgo.getFullYear()}-${String(twoMonthsAgo.getMonth() + 1).padStart(2, '0')}`;
+        this.log.debug(`Setting baseline check month to ${this.lastCheckedMaintenanceFeeMonth}.`);
+      }
+      return;
+    }
+
+    let [lastYear, lastMonth] = this.lastCheckedMaintenanceFeeMonth.split('-').map(Number);
+
+    for (let i = 0; i < 3; i++) {
+      let nextMonth = lastMonth + 1;
+      let nextYear = lastYear;
+      if (nextMonth > 12) {
+        nextMonth = 1;
+        nextYear++;
+      }
+
+      const now = new Date();
+
+      if (nextYear > now.getFullYear() || (nextYear === now.getFullYear() && nextMonth > now.getMonth() + 1)) {
+        break;
+      }
+
+      const nextMonthStr = `${nextYear}-${String(nextMonth).padStart(2, '0')}`;
+      this.log.debug(`Proactively checking for maintenance fee for ${nextMonthStr}...`);
+      const feeData = await this.shomeClient.getMaintenanceFee(nextYear, nextMonth);
+
+      if (feeData && feeData.expense_total && feeData.expense_total.length > 0 && feeData.expense_total[0].money > 0) {
+        this.log.info(`Found new maintenance fee data for ${nextMonthStr}.`);
+
+        const feeUUID = this.api.hap.uuid.generate('shome-maintenance-fee');
+        const feeHandler = this.accessoryHandlers.get(feeUUID) as MaintenanceFeeAccessory | undefined;
+        if (feeHandler) {
+          feeHandler.triggerNotification(feeData);
+          this.lastCheckedMaintenanceFeeMonth = nextMonthStr;
+          this.log.debug(`Last checked maintenance fee month updated to: ${nextMonthStr}`);
+
+          lastYear = nextYear;
+          lastMonth = nextMonth;
+        } else {
+          this.log.warn('Maintenance fee accessory handler not found.');
+          break;
+        }
+      } else {
+        this.log.debug(`No maintenance fee data found for ${nextMonthStr}. Stopping check for this cycle.`);
+        break;
+      }
     }
   }
 

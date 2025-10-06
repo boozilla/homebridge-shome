@@ -37,6 +37,29 @@ export interface ParkingEvent {
     unit: 'in' | 'out';
 }
 
+export interface ExpenseItem {
+    money: number;
+    name: string;
+}
+
+export interface ExpenseBundle {
+    money: number;
+    name: string;
+}
+
+export interface ExpenseTotal {
+    money: number;
+    name: string;
+}
+
+export interface MaintenanceFeeData {
+    search_year: string;
+    search_month: string;
+    expense_item: ExpenseItem[];
+    expense_bundle: ExpenseBundle[];
+    expense_total: ExpenseTotal[];
+}
+
 type QueueTask<T = unknown> = {
     request: () => Promise<T>;
     resolve: (value: T | PromiseLike<T>) => void;
@@ -321,6 +344,47 @@ export class ShomeClient {
     });
   }
 
+  async getParkingHistory(): Promise<ParkingEvent[]> {
+    return this.executeWithRetries(async () => {
+      const token = this.cachedAccessToken;
+      if (!token || !this.homeId) {
+        this.log.error('Cannot fetch parking history: Not logged in or homeId is missing.');
+        return [];
+      }
+
+      const createDate = this.getDateTime();
+      const hashData = this.sha512(`IHRESTAPI${this.homeId}${createDate}`);
+      const response = await axios.get(`${BASE_URL}/v18/complex/${this.homeId}/parking/inout-histories`, {
+        params: { createDate, hashData },
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+
+      return response.data.data || [];
+    });
+  }
+
+  async getMaintenanceFee(year: number, month: number): Promise<MaintenanceFeeData | null> {
+    return this.executeWithRetries(async () => {
+      const token = this.cachedAccessToken;
+      if (!token || !this.homeId) {
+        this.log.error('Cannot fetch maintenance fee: Not logged in or homeId is missing.');
+        return null;
+      }
+
+      const createDate = this.getDateTime();
+      const hashData = this.sha512(`IHRESTAPI${this.homeId}${year}${month}${createDate}`);
+      const response = await axios.get(`${BASE_URL}/v18/complex/${this.homeId}/maintenance-fee/${year}/${month}`, {
+        params: { createDate, hashData },
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+
+      if (response.data && response.data.data && response.data.data.length > 0) {
+        return response.data.data[0];
+      }
+      return null;
+    });
+  }
+
   async getThumbnailImage(visitor: Visitor): Promise<Buffer | null> {
     const request = async () => {
       const token = this.cachedAccessToken;
@@ -350,25 +414,6 @@ export class ShomeClient {
     };
 
     return this.executeWithRetries(request);
-  }
-
-  async getParkingHistory(): Promise<ParkingEvent[]> {
-    return this.executeWithRetries(async () => {
-      const token = this.cachedAccessToken;
-      if (!token || !this.ihdId) {
-        this.log.error('Cannot fetch parking history: Not logged in or ihdId is missing.');
-        return [];
-      }
-
-      const createDate = this.getDateTime();
-      const hashData = this.sha512(`IHRESTAPI${this.ihdId}${createDate}`);
-      const response = await axios.get(`${BASE_URL}/v18/complex/${this.ihdId}/parking/inout-histories`, {
-        params: { createDate, hashData },
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-
-      return response.data.data || [];
-    });
   }
 
   private sha512(input: string): string {
