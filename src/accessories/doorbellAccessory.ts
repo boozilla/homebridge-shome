@@ -44,6 +44,11 @@ export class DoorbellAccessory {
     }, 1000);
   }
 
+  public initializeLatestVisitor(visitor: Visitor) {
+    this.platform.log.info(`Initializing doorbell with the most recent visitor from ${visitor.recodDt}.`);
+    this.cameraController.updateVisitor(visitor);
+  }
+
   public shutdown() {
     this.cameraController.shutdown();
   }

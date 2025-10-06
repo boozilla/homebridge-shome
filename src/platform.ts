@@ -64,7 +64,7 @@ export class ShomePlatform implements DynamicPlatformPlugin {
       if (this.pollingTimer) {
         clearInterval(this.pollingTimer);
       }
-      // Add this loop to properly shut down handlers
+
       for (const handler of this.accessoryHandlers.values()) {
         if (handler instanceof DoorbellAccessory) {
           handler.shutdown();
@@ -108,6 +108,19 @@ export class ShomePlatform implements DynamicPlatformPlugin {
       const doorbellDevice = { thngModelTypeName: 'DOORBELL', nickname: 'Doorbell', thngId: 'shome-doorbell' } as MainDevice;
       const doorbellAccessory = this.setupAccessory(doorbellDevice, null, doorbellUUID);
       foundAccessories.push(doorbellAccessory);
+
+      const doorbellHandler = this.accessoryHandlers.get(doorbellUUID) as DoorbellAccessory | undefined;
+      if (doorbellHandler) {
+        this.log.info('Initializing latest visitor for doorbell...');
+        const visitorList = await this.shomeClient.getVisitorHistory();
+        if (visitorList && visitorList.length > 0) {
+          visitorList.sort((a, b) => b.recodDt.localeCompare(a.recodDt));
+          const latestVisitor = visitorList[0];
+          doorbellHandler.initializeLatestVisitor(latestVisitor);
+        } else {
+          this.log.info('No visitor history found, skipping initialization.');
+        }
+      }
 
       const parkingUUID = this.api.hap.uuid.generate('shome-parking');
       const parkingDevice = { thngModelTypeName: 'PARKING', nickname: 'Parking Sensor', thngId: 'shome-parking' } as MainDevice;
