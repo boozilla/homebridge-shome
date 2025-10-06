@@ -1,16 +1,17 @@
 import { API, Characteristic, DynamicPlatformPlugin, Logger, PlatformAccessory, PlatformConfig, Service } from 'homebridge';
 import { PLATFORM_NAME, PLUGIN_NAME } from './settings.js';
-import { ShomeClient, MainDevice, SubDevice, Visitor } from './shomeClient.js';
+import { ShomeClient, MainDevice, SubDevice, Visitor, ParkingEvent } from './shomeClient.js';
 import { LightAccessory } from './accessories/lightAccessory.js';
 import { VentilatorAccessory } from './accessories/ventilatorAccessory.js';
 import { HeaterAccessory } from './accessories/heaterAccessory.js';
 import { DoorlockAccessory } from './accessories/doorlockAccessory.js';
 import { DoorbellAccessory } from './accessories/doorbellAccessory.js';
+import { ParkingAccessory } from './accessories/parkingAccessory.js';
 
 const CONTROLLABLE_MULTI_DEVICE_TYPES = ['LIGHT', 'HEATER', 'VENTILATOR'];
 const SPECIAL_CONTROLLABLE_TYPES = ['DOORLOCK'];
 
-type AccessoryHandler = LightAccessory | VentilatorAccessory | HeaterAccessory | DoorlockAccessory | DoorbellAccessory;
+type AccessoryHandler = LightAccessory | VentilatorAccessory | HeaterAccessory | DoorlockAccessory | DoorbellAccessory | ParkingAccessory;
 
 export class ShomePlatform implements DynamicPlatformPlugin {
   public readonly Service: typeof Service;
@@ -22,6 +23,7 @@ export class ShomePlatform implements DynamicPlatformPlugin {
   private pollingTimer?: NodeJS.Timeout;
 
   private lastCheckedTimestamp: Date = new Date();
+  private lastCheckedParkingTimestamp: Date = new Date();
 
   constructor(
         public readonly log: Logger,
@@ -104,6 +106,11 @@ export class ShomePlatform implements DynamicPlatformPlugin {
       const doorbellAccessory = this.setupAccessory(doorbellDevice, null, doorbellUUID);
       foundAccessories.push(doorbellAccessory);
 
+      const parkingUUID = this.api.hap.uuid.generate('shome-parking');
+      const parkingDevice = { thngModelTypeName: 'PARKING', nickname: 'Parking Sensor', thngId: 'shome-parking' } as MainDevice;
+      const parkingAccessory = this.setupAccessory(parkingDevice, null, parkingUUID);
+      foundAccessories.push(parkingAccessory);
+
       const accessoriesToRemove = this.accessories.filter(cachedAccessory =>
         !foundAccessories.some(foundAccessory => foundAccessory.UUID === cachedAccessory.UUID),
       );
@@ -168,6 +175,9 @@ export class ShomePlatform implements DynamicPlatformPlugin {
     case 'DOORBELL':
       this.accessoryHandlers.set(accessory.UUID, new DoorbellAccessory(this, accessory));
       break;
+    case 'PARKING':
+      this.accessoryHandlers.set(accessory.UUID, new ParkingAccessory(this, accessory));
+      break;
     }
   }
 
@@ -178,6 +188,7 @@ export class ShomePlatform implements DynamicPlatformPlugin {
       try {
         await this.pollDeviceUpdates();
         await this.checkForNewVisitors();
+        await this.checkForNewParkingEvents();
       } catch (error) {
         this.log.error('An error occurred during polling:', error);
       }
@@ -249,6 +260,40 @@ export class ShomePlatform implements DynamicPlatformPlugin {
       const latestVisitor = newVisitors[newVisitors.length - 1];
       this.lastCheckedTimestamp = this.parseRecordDt(latestVisitor.recodDt);
       this.log.debug(`Updated last checked timestamp to: ${this.lastCheckedTimestamp.toISOString()}`);
+    }
+  }
+
+  async checkForNewParkingEvents() {
+    this.log.debug('Checking for new parking events...');
+    const parkingEventList = await this.shomeClient.getParkingHistory();
+    const newParkingEvents: ParkingEvent[] = [];
+
+    for (const event of parkingEventList) {
+      const eventTime = new Date(event.park_date);
+
+      if (eventTime > this.lastCheckedParkingTimestamp) {
+        newParkingEvents.push(event);
+      }
+    }
+
+    if (newParkingEvents.length > 0) {
+      this.log.info(`Found ${newParkingEvents.length} new parking event(s).`);
+      newParkingEvents.sort((a, b) => a.park_date.localeCompare(b.park_date));
+
+      const parkingUUID = this.api.hap.uuid.generate('shome-parking');
+      const parkingHandler = this.accessoryHandlers.get(parkingUUID) as ParkingAccessory | undefined;
+
+      if (parkingHandler) {
+        for (const event of newParkingEvents) {
+          parkingHandler.newParkingEvent(event);
+        }
+      } else {
+        this.log.warn('Parking accessory handler not found.');
+      }
+
+      const latestEvent = newParkingEvents[newParkingEvents.length - 1];
+      this.lastCheckedParkingTimestamp = new Date(latestEvent.park_date);
+      this.log.debug(`Updated last checked parking timestamp to: ${this.lastCheckedParkingTimestamp.toISOString()}`);
     }
   }
 

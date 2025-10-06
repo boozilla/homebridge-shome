@@ -31,6 +31,12 @@ export interface Visitor {
     deviceLabel: string;
 }
 
+export interface ParkingEvent {
+    car_no: string;
+    park_date: string;
+    unit: 'in' | 'out';
+}
+
 type QueueTask<T = unknown> = {
     request: () => Promise<T>;
     resolve: (value: T | PromiseLike<T>) => void;
@@ -344,6 +350,25 @@ export class ShomeClient {
     };
 
     return this.executeWithRetries(request);
+  }
+
+  async getParkingHistory(): Promise<ParkingEvent[]> {
+    return this.executeWithRetries(async () => {
+      const token = this.cachedAccessToken;
+      if (!token || !this.ihdId) {
+        this.log.error('Cannot fetch parking history: Not logged in or ihdId is missing.');
+        return [];
+      }
+
+      const createDate = this.getDateTime();
+      const hashData = this.sha512(`IHRESTAPI${this.ihdId}${createDate}`);
+      const response = await axios.get(`${BASE_URL}/v18/complex/${this.ihdId}/parking/inout-histories`, {
+        params: { createDate, hashData },
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+
+      return response.data.data || [];
+    });
   }
 
   private sha512(input: string): string {
