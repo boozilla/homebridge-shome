@@ -26,7 +26,8 @@ export class ShomePlatform implements DynamicPlatformPlugin {
 
   private lastCheckedTimestamp: Date = new Date();
   private lastCheckedParkingTimestamp: Date = new Date();
-  private lastCheckedMaintenanceFeeMonth: string | null = null;
+  private lastCheckedMaintenanceFeeMonth: string | null = null; // YYYY-MM 형식
+  private isInitializingMaintenanceFee = false; // 중복 실행 방지 플래그
 
   constructor(
         public readonly log: Logger,
@@ -64,7 +65,7 @@ export class ShomePlatform implements DynamicPlatformPlugin {
       if (this.pollingTimer) {
         clearInterval(this.pollingTimer);
       }
-
+      // Add this loop to properly shut down handlers
       for (const handler of this.accessoryHandlers.values()) {
         if (handler instanceof DoorbellAccessory) {
           handler.shutdown();
@@ -108,19 +109,6 @@ export class ShomePlatform implements DynamicPlatformPlugin {
       const doorbellDevice = { thngModelTypeName: 'DOORBELL', nickname: 'Doorbell', thngId: 'shome-doorbell' } as MainDevice;
       const doorbellAccessory = this.setupAccessory(doorbellDevice, null, doorbellUUID);
       foundAccessories.push(doorbellAccessory);
-
-      const doorbellHandler = this.accessoryHandlers.get(doorbellUUID) as DoorbellAccessory | undefined;
-      if (doorbellHandler) {
-        this.log.info('Initializing latest visitor for doorbell...');
-        const visitorList = await this.shomeClient.getVisitorHistory();
-        if (visitorList && visitorList.length > 0) {
-          visitorList.sort((a, b) => b.recodDt.localeCompare(a.recodDt));
-          const latestVisitor = visitorList[0];
-          doorbellHandler.initializeLatestVisitor(latestVisitor);
-        } else {
-          this.log.info('No visitor history found, skipping initialization.');
-        }
-      }
 
       const parkingUUID = this.api.hap.uuid.generate('shome-parking');
       const parkingDevice = { thngModelTypeName: 'PARKING', nickname: 'Parking Sensor', thngId: 'shome-parking' } as MainDevice;
@@ -323,44 +311,54 @@ export class ShomePlatform implements DynamicPlatformPlugin {
   }
 
   async checkForNewMaintenanceFee() {
-    this.log.debug('Checking for new maintenance fee...');
-
-    if (!this.lastCheckedMaintenanceFeeMonth) {
-      this.log.debug('First run for maintenance fee check. Finding the latest available data...');
-      const now = new Date();
-      let initialFeeData: MaintenanceFeeData | null = null;
-      let initialYear = now.getFullYear();
-      let initialMonth = now.getMonth() + 1;
-
-      for (let i = 0; i < 3; i++) {
-        const feeData = await this.shomeClient.getMaintenanceFee(initialYear, initialMonth);
-        if (feeData && feeData.expense_total && feeData.expense_total.length > 0 && feeData.expense_total[0].money > 0) {
-          initialFeeData = feeData;
-          break;
-        }
-
-        initialMonth--;
-        if (initialMonth === 0) {
-          initialMonth = 12;
-          initialYear--;
-        }
-      }
-
-      if (initialFeeData) {
-        const monthStr = `${initialFeeData.search_year}-${initialFeeData.search_month}`;
-        this.log.info(`Found initial latest maintenance fee data for ${monthStr}.`);
-        this.lastCheckedMaintenanceFeeMonth = monthStr;
-      } else {
-        this.log.debug('Could not find any maintenance fee data for the last 3 months on first run.');
-
-        const twoMonthsAgo = new Date();
-        twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
-        this.lastCheckedMaintenanceFeeMonth = `${twoMonthsAgo.getFullYear()}-${String(twoMonthsAgo.getMonth() + 1).padStart(2, '0')}`;
-        this.log.debug(`Setting baseline check month to ${this.lastCheckedMaintenanceFeeMonth}.`);
-      }
+    // 초기화가 이미 진행 중이면, 이번 주기는 건너뜁니다.
+    if (this.isInitializingMaintenanceFee) {
+      this.log.debug('Maintenance fee initialization is already in progress. Skipping check.');
       return;
     }
 
+    // 최초 실행 시, 최신 관리비 데이터를 찾아 기준점을 설정합니다.
+    if (!this.lastCheckedMaintenanceFeeMonth) {
+      this.isInitializingMaintenanceFee = true; // 잠금 설정
+      this.log.debug('First run for maintenance fee check. Finding the latest available data...');
+
+      try {
+        const now = new Date();
+        let initialFeeData: MaintenanceFeeData | null = null;
+        let initialYear = now.getFullYear();
+        let initialMonth = now.getMonth() + 1;
+
+        for (let i = 0; i < 3; i++) {
+          const feeData = await this.shomeClient.getMaintenanceFee(initialYear, initialMonth);
+          if (feeData && feeData.expense_total && feeData.expense_total.length > 0 && feeData.expense_total[0].money > 0) {
+            initialFeeData = feeData;
+            break;
+          }
+          initialMonth--;
+          if (initialMonth === 0) {
+            initialMonth = 12;
+            initialYear--;
+          }
+        }
+
+        if (initialFeeData) {
+          const monthStr = `${initialFeeData.search_year}-${initialFeeData.search_month}`;
+          this.log.info(`Found initial latest maintenance fee data for ${monthStr}.`);
+          this.lastCheckedMaintenanceFeeMonth = monthStr;
+        } else {
+          this.log.debug('Could not find any maintenance fee data for the last 3 months on first run.');
+          const twoMonthsAgo = new Date();
+          twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
+          this.lastCheckedMaintenanceFeeMonth = `${twoMonthsAgo.getFullYear()}-${String(twoMonthsAgo.getMonth() + 1).padStart(2, '0')}`;
+          this.log.debug(`Setting baseline check month to ${this.lastCheckedMaintenanceFeeMonth}.`);
+        }
+      } finally {
+        this.isInitializingMaintenanceFee = false; // 잠금 해제
+      }
+      return; // 최초 실행 로직은 여기서 종료
+    }
+
+    // 이후 실행 시, 마지막 확인된 달의 다음 달부터 순차적으로 확인합니다.
     let [lastYear, lastMonth] = this.lastCheckedMaintenanceFeeMonth.split('-').map(Number);
 
     for (let i = 0; i < 3; i++) {
@@ -372,7 +370,6 @@ export class ShomePlatform implements DynamicPlatformPlugin {
       }
 
       const now = new Date();
-
       if (nextYear > now.getFullYear() || (nextYear === now.getFullYear() && nextMonth > now.getMonth() + 1)) {
         break;
       }
