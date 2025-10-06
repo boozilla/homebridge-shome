@@ -59,6 +59,12 @@ export class ShomePlatform implements DynamicPlatformPlugin {
       if (this.pollingTimer) {
         clearInterval(this.pollingTimer);
       }
+      // Add this loop to properly shut down handlers
+      for (const handler of this.accessoryHandlers.values()) {
+        if (handler instanceof DoorbellAccessory) {
+          handler.shutdown();
+        }
+      }
     });
   }
 

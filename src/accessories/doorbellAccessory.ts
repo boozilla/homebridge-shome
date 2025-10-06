@@ -43,4 +43,8 @@ export class DoorbellAccessory {
       this.motionService.getCharacteristic(this.platform.Characteristic.MotionDetected).updateValue(false);
     }, 1000);
   }
+
+  public shutdown() {
+    this.cameraController.shutdown();
+  }
 }

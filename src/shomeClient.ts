@@ -346,7 +346,6 @@ export class ShomeClient {
     return this.executeWithRetries(request);
   }
 
-
   private sha512(input: string): string {
     return CryptoJS.SHA512(input).toString();
   }

@@ -1,7 +1,7 @@
 {
   "name": "@boozilla/homebridge-shome",
   "displayName": "sHome Plugin",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "private": false,
   "description": "A Homebridge plugin for Samsung Smart Home",
   "author": "boozilla",
@@ -33,7 +33,8 @@
   },
   "dependencies": {
     "axios": "^1.7.2",
-    "crypto-js": "^4.2.0"
+    "crypto-js": "^4.2.0",
+    "ffmpeg-for-homebridge": "^2.2.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
