@@ -10,12 +10,6 @@ door locks, using the Home app and Siri on your Apple devices.
 
 ## Key Features
 
-Of course. Here is the updated `## Key Features` section for your `README.md` file in English.
-
----
-
-### ## Key Features
-
 * **Light Control**: Turn individual lights in each room on or off.
 * **Heating Control**: Control thermostats in each room individually. Monitor the current temperature and set your desired target temperature.
 * **Ventilation System Control**: Turn the ventilation system on or off and adjust its fan speed.
