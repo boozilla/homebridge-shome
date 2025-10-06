@@ -218,7 +218,8 @@ export class ShomePlatform implements DynamicPlatformPlugin {
     const newVisitors: Visitor[] = [];
 
     for (const visitor of visitorList) {
-      const visitorTime = this.parseRecodDt(visitor.recodDt);
+      const visitorTime = this.parseRecordDt(visitor.recodDt);
+
       if (visitorTime > this.lastCheckedTimestamp) {
         newVisitors.push(visitor);
       }
@@ -240,18 +241,18 @@ export class ShomePlatform implements DynamicPlatformPlugin {
       }
 
       const latestVisitor = newVisitors[newVisitors.length - 1];
-      this.lastCheckedTimestamp = this.parseRecodDt(latestVisitor.recodDt);
+      this.lastCheckedTimestamp = this.parseRecordDt(latestVisitor.recodDt);
       this.log.debug(`Updated last checked timestamp to: ${this.lastCheckedTimestamp.toISOString()}`);
     }
   }
 
-  private parseRecodDt(recodDt: string): Date {
-    const year = parseInt(recodDt.substring(0, 4), 10);
-    const month = parseInt(recodDt.substring(4, 6), 10) - 1;
-    const day = parseInt(recodDt.substring(6, 8), 10);
-    const hour = parseInt(recodDt.substring(8, 10), 10);
-    const minute = parseInt(recodDt.substring(10, 12), 10);
-    const second = parseInt(recodDt.substring(12, 14), 10);
-    return new Date(year, month, day, hour, minute, second);
+  private parseRecordDt(recordDt: string): Date {
+    const year = parseInt(recordDt.substring(0, 4), 10);
+    const month = parseInt(recordDt.substring(4, 6), 10) - 1;
+    const day = parseInt(recordDt.substring(6, 8), 10);
+    const hour = parseInt(recordDt.substring(8, 10), 10);
+    const minute = parseInt(recordDt.substring(10, 12), 10);
+    const second = parseInt(recordDt.substring(12, 14), 10);
+    return new Date(Date.UTC(year, month, day, hour, minute, second));
   }
 }
