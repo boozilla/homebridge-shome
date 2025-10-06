@@ -17,6 +17,7 @@ export class ShomeCameraController implements CameraStreamingDelegate {
   private readonly log: Logger;
   private latestVisitor: Visitor | null = null;
   public readonly controller: CameraController;
+  private cachedSnapshot: Buffer | null = null;
 
   constructor(
         private readonly platform: ShomePlatform,
@@ -57,6 +58,11 @@ export class ShomeCameraController implements CameraStreamingDelegate {
   public async handleSnapshotRequest(request: SnapshotRequest, callback: SnapshotRequestCallback): Promise<void> {
     this.log.info('Handling snapshot request...');
 
+    if (this.cachedSnapshot) {
+      this.log.info('Returning cached snapshot.');
+      return callback(undefined, this.cachedSnapshot);
+    }
+
     if (!this.latestVisitor) {
       this.log.warn('No visitor data available for snapshot. This will result in a "No Response" error until the first doorbell event.');
       return callback(new Error('No snapshot available'));
@@ -67,6 +73,7 @@ export class ShomeCameraController implements CameraStreamingDelegate {
 
       if (imageBuffer) {
         this.log.info('Snapshot fetched successfully via shomeClient.');
+        this.cachedSnapshot = imageBuffer;
         callback(undefined, imageBuffer);
       } else {
         throw new Error('Failed to retrieve image buffer from shomeClient.');
@@ -80,6 +87,7 @@ export class ShomeCameraController implements CameraStreamingDelegate {
   public updateVisitor(visitor: Visitor) {
     this.log.debug(`Updating latest visitor data for sttId: ${visitor.sttId}`);
     this.latestVisitor = visitor;
+    this.cachedSnapshot = null;
   }
 
   prepareStream(): Promise<void> {
