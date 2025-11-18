@@ -23,6 +23,7 @@ export class ShomePlatform implements DynamicPlatformPlugin {
   private readonly accessoryHandlers = new Map<string, AccessoryHandler>();
   private pollingInterval: number;
   private pollingTimer?: NodeJS.Timeout;
+  private isPolling = false;
 
   private lastCheckedTimestamp: Date = new Date();
   private lastCheckedParkingTimestamp: Date = new Date();
@@ -63,7 +64,7 @@ export class ShomePlatform implements DynamicPlatformPlugin {
 
     this.api.on('shutdown', () => {
       if (this.pollingTimer) {
-        clearInterval(this.pollingTimer);
+        clearTimeout(this.pollingTimer);
       }
 
       for (const handler of this.accessoryHandlers.values()) {
@@ -195,7 +196,22 @@ export class ShomePlatform implements DynamicPlatformPlugin {
 
   startPolling() {
     this.log.info(`Starting periodic state polling every ${this.pollingInterval / 1000} seconds.`);
-    this.pollingTimer = setInterval(async () => {
+
+    const scheduleNext = () => {
+      if (this.pollingInterval > 0) {
+        this.pollingTimer = setTimeout(run, this.pollingInterval);
+      }
+    };
+
+    const run = async () => {
+      if (this.isPolling) {
+        this.log.warn('Previous polling cycle still running. Skipping this cycle to prevent overlap.');
+        scheduleNext();
+        return;
+      }
+
+      this.isPolling = true;
+      const startedAt = Date.now();
       this.log.debug('Polling for updates...');
       try {
         await this.pollDeviceUpdates();
@@ -204,8 +220,15 @@ export class ShomePlatform implements DynamicPlatformPlugin {
         await this.checkForNewMaintenanceFee();
       } catch (error) {
         this.log.error('An error occurred during polling:', error);
+      } finally {
+        const elapsed = Date.now() - startedAt;
+        this.log.debug(`Polling cycle finished in ${elapsed} ms.`);
+        this.isPolling = false;
+        scheduleNext();
       }
-    }, this.pollingInterval);
+    };
+
+    scheduleNext();
   }
 
   async pollDeviceUpdates() {
