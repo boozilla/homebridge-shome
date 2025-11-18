@@ -197,16 +197,12 @@ export class ShomePlatform implements DynamicPlatformPlugin {
   startPolling() {
     this.log.info(`Starting periodic state polling every ${this.pollingInterval / 1000} seconds.`);
 
-    const scheduleNext = () => {
-      if (this.pollingInterval > 0) {
-        this.pollingTimer = setTimeout(run, this.pollingInterval);
-      }
-    };
-
-    const run = async () => {
+    const pollCycle = async (): Promise<void> => {
       if (this.isPolling) {
         this.log.warn('Previous polling cycle still running. Skipping this cycle to prevent overlap.');
-        scheduleNext();
+        if (this.pollingInterval > 0) {
+          this.pollingTimer = setTimeout(pollCycle, this.pollingInterval);
+        }
         return;
       }
 
@@ -224,11 +220,15 @@ export class ShomePlatform implements DynamicPlatformPlugin {
         const elapsed = Date.now() - startedAt;
         this.log.debug(`Polling cycle finished in ${elapsed} ms.`);
         this.isPolling = false;
-        scheduleNext();
+        if (this.pollingInterval > 0) {
+          this.pollingTimer = setTimeout(pollCycle, this.pollingInterval);
+        }
       }
     };
 
-    scheduleNext();
+    if (this.pollingInterval > 0) {
+      this.pollingTimer = setTimeout(pollCycle, this.pollingInterval);
+    }
   }
 
   async pollDeviceUpdates() {
