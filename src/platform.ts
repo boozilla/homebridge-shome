@@ -29,6 +29,7 @@ export class ShomePlatform implements DynamicPlatformPlugin {
   private lastCheckedParkingTimestamp: Date = new Date();
   private lastCheckedMaintenanceFeeMonth: string | null = null;
   private isInitializingMaintenanceFee = false;
+  private isInitializingParking = true;
 
   constructor(
         public readonly log: Logger,
@@ -302,6 +303,23 @@ export class ShomePlatform implements DynamicPlatformPlugin {
   async checkForNewParkingEvents() {
     this.log.debug('Checking for new parking events...');
     const parkingEventList = await this.shomeClient.getParkingHistory();
+
+    // 최초 실행 시에는 알림을 발생시키지 않고, 최신 이벤트의 시각으로 기준만 설정합니다.
+    if (this.isInitializingParking) {
+      if (parkingEventList.length > 0) {
+        // 최신 이벤트 기준으로 정렬 후 마지막(가장 최근) 이벤트의 시간으로 기준 설정
+        const sorted = [...parkingEventList].sort((a, b) => a.park_date.localeCompare(b.park_date));
+        const latest = sorted[sorted.length - 1];
+        this.lastCheckedParkingTimestamp = new Date(latest.park_date);
+        this.log.info(`Initialized parking baseline to latest event: ${this.lastCheckedParkingTimestamp.toISOString()}`);
+      } else {
+        // 이력이 없다면 현재 시각을 기준으로 설정
+        this.lastCheckedParkingTimestamp = new Date();
+        this.log.info(`No parking history found. Initialized parking baseline to now: ${this.lastCheckedParkingTimestamp.toISOString()}`);
+      }
+      this.isInitializingParking = false;
+      return;
+    }
     const newParkingEvents: ParkingEvent[] = [];
 
     for (const event of parkingEventList) {
