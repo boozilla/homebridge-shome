@@ -207,6 +207,15 @@ export class ShomePlatform implements DynamicPlatformPlugin {
         return;
       }
 
+      // Circuit Breaker 상태 확인 - 회로가 열려 있으면 폴링 스킵
+      if (this.shomeClient.isCircuitOpen()) {
+        this.log.debug('Circuit breaker is open. Skipping polling cycle.');
+        if (this.pollingInterval > 0) {
+          this.pollingTimer = setTimeout(pollCycle, this.pollingInterval);
+        }
+        return;
+      }
+
       this.isPolling = true;
       const startedAt = Date.now();
       this.log.debug('Polling for updates...');

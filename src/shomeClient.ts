@@ -10,6 +10,18 @@ const MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 1000;
 const REQUEST_DELAY_MS = 300; // 각 API 요청 사이의 딜레이 (ms)
 
+// 회복 가능한 네트워크 에러 코드
+const RECOVERABLE_NETWORK_ERRORS = ['EAI_AGAIN', 'ENOTFOUND', 'ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'ENETUNREACH'];
+
+// Circuit Breaker 설정
+const CIRCUIT_BREAKER_THRESHOLD = 5;      // 회로 개방까지 연속 실패 횟수
+const CIRCUIT_BREAKER_RESET_MS = 60000;   // 반개방까지 대기 시간 (60초)
+const MAX_NETWORK_RETRIES = 5;            // 네트워크 에러용 최대 재시도
+const NETWORK_INITIAL_BACKOFF_MS = 2000;  // 네트워크 에러 초기 대기 (2초)
+const NETWORK_MAX_BACKOFF_MS = 30000;     // 최대 대기 시간 (30초)
+const AXIOS_TIMEOUT_MS = 15000;           // 요청 타임아웃 (15초)
+const LOG_THROTTLE_INTERVAL_MS = 60000;   // 동일 에러 로그 간격 (60초)
+
 // Define and export interfaces for device types
 export interface MainDevice {
     thngId: string;
@@ -78,6 +90,13 @@ export class ShomeClient {
   private loginPromise: Promise<string | null> | null = null;
   private pendingPutRequests = new Set<string>();
 
+  // Circuit Breaker 상태
+  private circuitState: 'closed' | 'open' | 'half-open' = 'closed';
+  private consecutiveFailures = 0;
+  private circuitOpenedAt = 0;
+  private lastNetworkErrorLog = 0;
+  private lastNetworkErrorCode: string | null = null;
+
   constructor(
         private readonly log: Logger,
         private readonly username: string,
@@ -134,6 +153,7 @@ export class ShomeClient {
           password: hashedPassword,
           userId: this.username,
         },
+        timeout: AXIOS_TIMEOUT_MS,
       });
 
       if (response.data && response.data.accessToken) {
@@ -191,14 +211,23 @@ export class ShomeClient {
   }
 
   private async executeWithRetries<T>(request: () => Promise<T>, isQueued = false): Promise<T> {
+    // Circuit Breaker 상태 확인
+    if (!this.checkCircuit()) {
+      const waitTime = Math.max(0, CIRCUIT_BREAKER_RESET_MS - (Date.now() - this.circuitOpenedAt));
+      throw new Error(`Circuit breaker is open. Next retry in ${Math.ceil(waitTime / 1000)}s`);
+    }
+
     let retries = 0;
     while (true) {
       try {
         if (!isQueued) {
           await this.login();
         }
-        return await request();
+        const result = await request();
+        this.recordSuccess();
+        return result;
       } catch (error) {
+        const networkErrorCode = this.isRecoverableNetworkError(error);
         const isAuthError = axios.isAxiosError(error) && error.response?.status === 401;
 
         if (isAuthError) {
@@ -207,21 +236,134 @@ export class ShomeClient {
           this.tokenExpiry = 0;
         }
 
-        if (retries >= MAX_RETRIES) {
-          this.log.error(`Request failed after ${MAX_RETRIES} retries. Giving up.`, error);
+        // 네트워크 에러는 더 많은 재시도 허용
+        const effectiveMaxRetries = networkErrorCode ? MAX_NETWORK_RETRIES : MAX_RETRIES;
+
+        if (retries >= effectiveMaxRetries) {
+          if (networkErrorCode) {
+            this.recordFailure(networkErrorCode);
+            if (this.shouldLogNetworkError(networkErrorCode)) {
+              this.log.error(
+                `Network error (${networkErrorCode}) persists after ${effectiveMaxRetries} retries. ` +
+                `Circuit breaker state: ${this.circuitState}`,
+              );
+            }
+          } else {
+            this.log.error(`Request failed after ${effectiveMaxRetries} retries. Giving up.`, error);
+          }
           throw error;
         }
 
         retries++;
-        const backoffTime = INITIAL_BACKOFF_MS * Math.pow(2, retries - 1);
-        if (!isAuthError) {
+
+        // 네트워크 에러는 더 긴 backoff 적용
+        let backoffTime: number;
+        if (networkErrorCode) {
+          backoffTime = Math.min(
+            NETWORK_INITIAL_BACKOFF_MS * Math.pow(2, retries - 1),
+            NETWORK_MAX_BACKOFF_MS,
+          );
+        } else {
+          backoffTime = INITIAL_BACKOFF_MS * Math.pow(2, retries - 1);
+        }
+
+        // 로그 스로틀링 적용
+        if (networkErrorCode) {
+          if (this.shouldLogNetworkError(networkErrorCode)) {
+            this.log.warn(
+              `Network error (${networkErrorCode}). Retrying in ${backoffTime / 1000}s... ` +
+              `(Attempt ${retries}/${effectiveMaxRetries})`,
+            );
+          }
+        } else if (!isAuthError) {
           this.log.warn(`Request failed. Retrying in ${backoffTime}ms... (Attempt ${retries}/${MAX_RETRIES})`);
         }
+
         await new Promise(resolve => setTimeout(resolve, backoffTime));
 
-        await this.login();
+        // 네트워크 에러가 아닌 경우에만 재로그인 시도
+        if (!networkErrorCode) {
+          await this.login();
+        }
       }
     }
+  }
+
+  // Circuit Breaker 헬퍼 메서드들
+  private isRecoverableNetworkError(error: unknown): string | null {
+    if (axios.isAxiosError(error)) {
+      const code = error.code;
+      if (code && RECOVERABLE_NETWORK_ERRORS.includes(code)) {
+        return code;
+      }
+      if (code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        return 'TIMEOUT';
+      }
+    }
+    return null;
+  }
+
+  private shouldLogNetworkError(errorCode: string): boolean {
+    const now = Date.now();
+    if (this.lastNetworkErrorCode !== errorCode ||
+        now - this.lastNetworkErrorLog >= LOG_THROTTLE_INTERVAL_MS) {
+      this.lastNetworkErrorLog = now;
+      this.lastNetworkErrorCode = errorCode;
+      return true;
+    }
+    return false;
+  }
+
+  private checkCircuit(): boolean {
+    if (this.circuitState === 'closed') {
+      return true;
+    }
+
+    if (this.circuitState === 'open') {
+      const elapsed = Date.now() - this.circuitOpenedAt;
+      if (elapsed >= CIRCUIT_BREAKER_RESET_MS) {
+        this.circuitState = 'half-open';
+        this.log.info('Circuit breaker transitioning to half-open state. Testing connection...');
+        return true;
+      }
+      return false;
+    }
+
+    // half-open: 테스트 요청 허용
+    return true;
+  }
+
+  private recordSuccess(): void {
+    if (this.circuitState === 'half-open') {
+      this.log.info('Circuit breaker closed. Network connection restored.');
+    }
+    this.circuitState = 'closed';
+    this.consecutiveFailures = 0;
+    this.lastNetworkErrorCode = null;
+  }
+
+  private recordFailure(errorCode: string): void {
+    this.consecutiveFailures++;
+
+    if (this.circuitState === 'half-open') {
+      this.circuitState = 'open';
+      this.circuitOpenedAt = Date.now();
+      this.log.warn(`Circuit breaker reopened after half-open test failed (${errorCode}).`);
+      return;
+    }
+
+    if (this.consecutiveFailures >= CIRCUIT_BREAKER_THRESHOLD && this.circuitState === 'closed') {
+      this.circuitState = 'open';
+      this.circuitOpenedAt = Date.now();
+      this.log.warn(
+        `Circuit breaker opened after ${this.consecutiveFailures} consecutive failures. ` +
+        `Will retry in ${CIRCUIT_BREAKER_RESET_MS / 1000} seconds.`,
+      );
+    }
+  }
+
+  public isCircuitOpen(): boolean {
+    return this.circuitState === 'open';
   }
 
   public isDeviceBusy(deviceId: string): boolean {
@@ -241,6 +383,7 @@ export class ShomeClient {
       const response = await axios.get(`${BASE_URL}/v16/settings/${this.ihdId}/devices/`, {
         params: { createDate, hashData },
         headers: { 'Authorization': `Bearer ${token}` },
+        timeout: AXIOS_TIMEOUT_MS,
       });
 
       return response.data.deviceList || [];
@@ -261,6 +404,7 @@ export class ShomeClient {
       const response = await axios.get(`${BASE_URL}/v18/settings/${typePath}/${thingId}`, {
         params: { createDate, hashData },
         headers: { 'Authorization': `Bearer ${token}` },
+        timeout: AXIOS_TIMEOUT_MS,
       });
 
       return response.data.deviceInfoList || null;
@@ -287,6 +431,7 @@ export class ShomeClient {
           hashData,
         },
         headers: { 'Authorization': `Bearer ${token}` },
+        timeout: AXIOS_TIMEOUT_MS,
       });
 
       const displayName = nickname || deviceId;
@@ -315,6 +460,7 @@ export class ShomeClient {
           hashData,
         },
         headers: { 'Authorization': `Bearer ${token}` },
+        timeout: AXIOS_TIMEOUT_MS,
       });
 
       const displayName = nickname || thingId;
@@ -338,6 +484,7 @@ export class ShomeClient {
       const response = await axios.get(`${BASE_URL}/v16/histories/${this.homeId}/video-histories`, {
         params: { createDate, hashData, offset },
         headers: { 'Authorization': `Bearer ${token}` },
+        timeout: AXIOS_TIMEOUT_MS,
       });
 
       return response.data.videoList || [];
@@ -357,6 +504,7 @@ export class ShomeClient {
       const response = await axios.get(`${BASE_URL}/v18/complex/${this.homeId}/parking/inout-histories`, {
         params: { createDate, hashData },
         headers: { 'Authorization': `Bearer ${token}` },
+        timeout: AXIOS_TIMEOUT_MS,
       });
 
       return response.data.data || [];
@@ -376,6 +524,7 @@ export class ShomeClient {
       const response = await axios.get(`${BASE_URL}/v18/complex/${this.homeId}/maintenance-fee/${year}/${month}`, {
         params: { createDate, hashData },
         headers: { 'Authorization': `Bearer ${token}` },
+        timeout: AXIOS_TIMEOUT_MS,
       });
 
       if (response.data && response.data.data && response.data.data.length > 0) {
@@ -408,6 +557,7 @@ export class ShomeClient {
         },
         headers: { 'Authorization': `Bearer ${token}` },
         responseType: 'arraybuffer',
+        timeout: AXIOS_TIMEOUT_MS,
       });
 
       return Buffer.from(response.data, 'binary');

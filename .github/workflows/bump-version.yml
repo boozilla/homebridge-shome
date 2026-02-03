@@ -1,0 +1,53 @@
+name: Bump Version
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Version type to bump'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+        default: patch
+
+permissions:
+  contents: write
+
+jobs:
+  bump-version:
+    name: Bump Version
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump version
+        run: npm version ${{ inputs.version_type }}
+
+      - name: Push changes and tags
+        run: git push origin main --tags
+
+      - name: Summary
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "## Version Bumped" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**New Version:** v$VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "**Bump Type:** ${{ inputs.version_type }}" >> $GITHUB_STEP_SUMMARY
