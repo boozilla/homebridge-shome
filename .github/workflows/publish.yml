@@ -102,9 +102,12 @@ jobs:
         if: inputs.version_type == 'none'
         run: |
           VERSION=${{ steps.get_version.outputs.version }}
-          if ! git rev-parse "v$VERSION" >/dev/null 2>&1; then
+          # Check if tag exists on remote
+          if ! git ls-remote --tags origin | grep -q "refs/tags/v$VERSION$"; then
             git tag "v$VERSION"
             git push origin "v$VERSION"
+          else
+            echo "Tag v$VERSION already exists on remote, skipping"
           fi
 
       - name: Summary
