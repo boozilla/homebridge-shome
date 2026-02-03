@@ -1,13 +1,22 @@
 name: Publish to npm
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Version type to bump (none = publish current version)'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - none
+        default: patch
 
 permissions:
   id-token: write
-  contents: read
+  contents: write
 
 jobs:
   validate:
@@ -39,9 +48,11 @@ jobs:
         run: npm run build
 
   publish:
-    name: Publish to npm
+    name: Bump Version & Publish
     needs: validate
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
 
     steps:
       - name: Checkout repository
@@ -60,25 +71,72 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Verify version matches tag
+      - name: Configure git
         run: |
-          TAG_VERSION="${GITHUB_REF#refs/tags/v}"
-          PACKAGE_VERSION=$(node -p "require('./package.json').version")
-          if [ "$TAG_VERSION" != "$PACKAGE_VERSION" ]; then
-            echo "Error: Tag version ($TAG_VERSION) does not match package.json version ($PACKAGE_VERSION)"
-            exit 1
-          fi
-          echo "Version verified: $PACKAGE_VERSION"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump version
+        if: inputs.version_type != 'none'
+        run: npm version ${{ inputs.version_type }} --no-git-tag-version
+
+      - name: Get version
+        id: get_version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Publish to npm
         run: npm publish --provenance --access public
 
+      - name: Commit and push
+        if: inputs.version_type != 'none'
+        run: |
+          VERSION=${{ steps.get_version.outputs.version }}
+          git add package.json package-lock.json
+          git commit -m "chore(release): v$VERSION"
+          git tag "v$VERSION"
+          git push origin main --tags
+
+      - name: Create tag (without version bump)
+        if: inputs.version_type == 'none'
+        run: |
+          VERSION=${{ steps.get_version.outputs.version }}
+          if ! git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            git tag "v$VERSION"
+            git push origin "v$VERSION"
+          fi
+
       - name: Summary
         run: |
-          VERSION=$(node -p "require('./package.json').version")
+          VERSION=${{ steps.get_version.outputs.version }}
           echo "## Published to npm" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Package:** @boozilla/homebridge-shome" >> $GITHUB_STEP_SUMMARY
           echo "**Version:** $VERSION" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ inputs.version_type }}" != "none" ]; then
+            echo "**Bump Type:** ${{ inputs.version_type }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Bump Type:** none (republish)" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "[View on npm](https://www.npmjs.com/package/@boozilla/homebridge-shome)" >> $GITHUB_STEP_SUMMARY
+
+  release:
+    name: Create GitHub Release
+    needs: publish
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.publish.outputs.version }}
+          name: v${{ needs.publish.outputs.version }}
+          draft: true
+          generate_release_notes: true
