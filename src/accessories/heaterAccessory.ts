@@ -81,7 +81,7 @@ export class HeaterAccessory {
     const subDevice = this.accessory.context.subDevice;
     const targetTemp = subDevice.setTemp;
 
-    if (subDevice.deviceStatus !== 1 || targetTemp < 5) {
+    if (targetTemp < 5) {
       return 5;
     }
     return targetTemp;

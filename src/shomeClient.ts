@@ -178,6 +178,9 @@ export class ShomeClient {
 
   private enqueuePut<T>(request: () => Promise<T>, deviceId?: string): Promise<T> {
     return new Promise<T>((resolve, reject) => {
+      if (deviceId) {
+        this.pendingPutRequests.add(deviceId);
+      }
       this.putQueue.push({ request, resolve, reject, deviceId });
       this.processPutQueue();
     });
@@ -191,9 +194,6 @@ export class ShomeClient {
 
     while (this.putQueue.length > 0) {
       const task = this.putQueue.shift()!;
-      if (task.deviceId) {
-        this.pendingPutRequests.add(task.deviceId);
-      }
       try {
         const result = await this.executeWithRetries(task.request, true);
         task.resolve(result);

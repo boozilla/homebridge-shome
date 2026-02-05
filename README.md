@@ -10,10 +10,10 @@ door locks, using the Home app and Siri on your Apple devices.
 
 ## Key Features
 
-* **Light Control**: Turn individual lights in each room on or off.
-* **Heating Control**: Control thermostats in each room individually. Monitor the current temperature and set your desired target temperature.
-* **Ventilation System Control**: Turn the ventilation system on or off and adjust its fan speed.
-* **Digital Door Lock**: Check the current state of your door lock (locked/unlocked) and unlock it remotely.
+* **Light Control**: Turn individual lights in each room on or off. Supports Siri voice commands like "Turn on the living room light".
+* **Heating Control**: Control thermostats in each room individually. Monitor the current temperature and set your desired target temperature. Supports Siri voice commands like "Set the temperature to 24 degrees" or "Lower the temperature by 2 degrees".
+* **Ventilation System Control**: Turn the ventilation system on or off and adjust its fan speed. Supports Siri voice commands like "Turn on the ventilator" or "Set the fan speed to 50%".
+* **Digital Door Lock**: Check the current state of your door lock (locked/unlocked) and unlock it remotely. Supports Siri voice commands like "Unlock the front door".
 * **Visitor Notifications**: Automatically creates a "Visitor Alert" motion sensor in HomeKit. When a new visitor is detected, this sensor is triggered, sending a notification to your Apple devices (if you have notifications enabled for the sensor in the Home app).
 * **Parking Notifications**: Triggers a "Parking Activity" motion sensor when a vehicle enters or exits the parking lot, allowing you to receive notifications and create automations based on arrivals and departures.
 * **Maintenance Fee Alerts**: Get notified via a "Maintenance Fee Update" motion sensor as soon as your new monthly maintenance fee statement is available. The plugin features an optimized polling logic to check for updates efficiently.
