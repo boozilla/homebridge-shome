@@ -30,9 +30,9 @@ export class VentilatorAccessory {
           .setProps({
             minValue: 0,
             maxValue: 99,
-            minStep: 33
+            minStep: 33,
           })
-      .onGet(this.getRotationSpeed.bind(this))
+          .onGet(this.getRotationSpeed.bind(this))
           .onSet(this.setRotationSpeed.bind(this));
   }
 

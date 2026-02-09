@@ -17,7 +17,7 @@ export class AirconAccessory {
       .setCharacteristic(this.platform.Characteristic.Model, 'Aircon')
       .setCharacteristic(this.platform.Characteristic.SerialNumber, `${device.thngId}-${subDevice.deviceId}`);
 
-    this.service = this.accessory.getService(this.platform.Service.HeaterCooler) || this.accessory.addService(this.platform.Service.HeaterCooler)
+    this.service = this.accessory.getService(this.platform.Service.HeaterCooler) || this.accessory.addService(this.platform.Service.HeaterCooler);
 
     this.service.setCharacteristic(this.platform.Characteristic.Name, subDevice.nickname);
 
@@ -56,15 +56,15 @@ export class AirconAccessory {
   async getActive(): Promise<CharacteristicValue> {
     const subDevice = this.accessory.context.subDevice;
     return subDevice.deviceStatus === 1
-    ? this.platform.Characteristic.Active.ACTIVE
-    : this.platform.Characteristic.Active.INACTIVE;
+      ? this.platform.Characteristic.Active.ACTIVE
+      : this.platform.Characteristic.Active.INACTIVE;
   }
 
   async getCurrentState(): Promise<CharacteristicValue> {
     const subDevice = this.accessory.context.subDevice;
     return subDevice.deviceStatus === 1
-    ? this.platform.Characteristic.CurrentHeaterCoolerState.COOLING
-    : this.platform.Characteristic.CurrentHeaterCoolerState.INACTIVE;
+      ? this.platform.Characteristic.CurrentHeaterCoolerState.COOLING
+      : this.platform.Characteristic.CurrentHeaterCoolerState.INACTIVE;
   }
 
   async getTargetState(): Promise<CharacteristicValue> {
@@ -76,7 +76,7 @@ export class AirconAccessory {
     return subDevice.currentTemp;
   }
 
-  async getTargetTemperature(value: CharacteristicValue): Promise<CharacteristicValue>  {
+  async getTargetTemperature(): Promise<CharacteristicValue>  {
     const subDevice = this.accessory.context.subDevice;
     const targetTemp = subDevice.setTemp;
 
