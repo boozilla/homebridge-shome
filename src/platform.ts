@@ -3,16 +3,17 @@ import { PLATFORM_NAME, PLUGIN_NAME } from './settings.js';
 import { ShomeClient, MainDevice, SubDevice, Visitor, ParkingEvent, MaintenanceFeeData } from './shomeClient.js';
 import { LightAccessory } from './accessories/lightAccessory.js';
 import { VentilatorAccessory } from './accessories/ventilatorAccessory.js';
+import { AirconAccessory } from './accessories/airconAccessory.js';
 import { HeaterAccessory } from './accessories/heaterAccessory.js';
 import { DoorlockAccessory } from './accessories/doorlockAccessory.js';
 import { DoorbellAccessory } from './accessories/doorbellAccessory.js';
 import { ParkingAccessory } from './accessories/parkingAccessory.js';
 import { MaintenanceFeeAccessory } from './accessories/maintenanceFeeAccessory.js';
 
-const CONTROLLABLE_MULTI_DEVICE_TYPES = ['LIGHT', 'HEATER', 'VENTILATOR'];
+const CONTROLLABLE_MULTI_DEVICE_TYPES = ['LIGHT', 'HEATER', 'AIRCON', 'VENTILATOR'];
 const SPECIAL_CONTROLLABLE_TYPES = ['DOORLOCK'];
 
-type AccessoryHandler = LightAccessory | VentilatorAccessory | HeaterAccessory |
+type AccessoryHandler = LightAccessory | VentilatorAccessory | HeaterAccessory | AirconAccessory |
     DoorlockAccessory | DoorbellAccessory | ParkingAccessory | MaintenanceFeeAccessory;
 
 export class ShomePlatform implements DynamicPlatformPlugin {
@@ -91,6 +92,7 @@ export class ShomePlatform implements DynamicPlatformPlugin {
       const foundAccessories: PlatformAccessory[] = [];
 
       for (const device of devices) {
+        this.log.info(`${device.thngModelTypeName} Founded.`);
         if (CONTROLLABLE_MULTI_DEVICE_TYPES.includes(device.thngModelTypeName)) {
           const deviceInfoList = await this.shomeClient.getDeviceInfo(device.thngId, device.thngModelTypeName);
           if (deviceInfoList) {
@@ -175,6 +177,9 @@ export class ShomePlatform implements DynamicPlatformPlugin {
       case 'HEATER':
         this.accessoryHandlers.set(accessory.UUID, new HeaterAccessory(this, accessory));
         break;
+      case 'AIRCON':
+        this.accessoryHandlers.set(accessory.UUID, new AirconAccessory(this, accessory));
+        break;
       }
       return;
     }
@@ -254,7 +259,7 @@ export class ShomePlatform implements DynamicPlatformPlugin {
               continue;
             }
             const subUuid = this.api.hap.uuid.generate(deviceId);
-            const handler = this.accessoryHandlers.get(subUuid) as LightAccessory | HeaterAccessory | VentilatorAccessory;
+            const handler = this.accessoryHandlers.get(subUuid) as LightAccessory | HeaterAccessory | AirconAccessory | VentilatorAccessory;
             if (handler) {
               handler.updateState(subDevice);
             }

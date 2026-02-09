@@ -1,0 +1,142 @@
+import { CharacteristicValue, PlatformAccessory, Service } from 'homebridge';
+import { ShomePlatform } from '../platform.js';
+import { SubDevice } from '../shomeClient.js';
+
+export class AirconAccessory {
+  private service: Service;
+
+  constructor(
+    private readonly platform: ShomePlatform,
+    private readonly accessory: PlatformAccessory,
+  ) {
+    const device = this.accessory.context.device;
+    const subDevice = this.accessory.context.subDevice;
+
+    this.accessory.getService(this.platform.Service.AccessoryInformation)!
+      .setCharacteristic(this.platform.Characteristic.Manufacturer, 'Samsung')
+      .setCharacteristic(this.platform.Characteristic.Model, 'Aircon')
+      .setCharacteristic(this.platform.Characteristic.SerialNumber, `${device.thngId}-${subDevice.deviceId}`);
+
+    this.service = this.accessory.getService(this.platform.Service.HeaterCooler) || this.accessory.addService(this.platform.Service.HeaterCooler);
+
+    this.service.setCharacteristic(this.platform.Characteristic.Name, subDevice.nickname);
+
+    this.service.getCharacteristic(this.platform.Characteristic.Active)
+      .onGet(this.getActive.bind(this))
+      .onSet(this.setActive.bind(this));
+
+    this.service.getCharacteristic(this.platform.Characteristic.CurrentHeaterCoolerState)
+      .onGet(this.getCurrentState.bind(this));
+
+    this.service.updateCharacteristic(this.platform.Characteristic.TargetHeaterCoolerState, this.platform.Characteristic.TargetHeaterCoolerState.COOL);
+
+    this.service.getCharacteristic(this.platform.Characteristic.TargetHeaterCoolerState)
+      .setProps({
+        validValues: [this.platform.Characteristic.TargetHeaterCoolerState.COOL],
+      })
+      .onSet(this.setTargetState.bind(this))
+      .onGet(this.getTargetState.bind(this));
+
+    this.service.getCharacteristic(this.platform.Characteristic.CurrentTemperature)
+      .onGet(this.getCurrentTemperature.bind(this));
+
+    const thresholdCharacteristic = this.service.getCharacteristic(this.platform.Characteristic.CoolingThresholdTemperature);
+
+    const currentTargetTemp = this.accessory.context.subDevice.setTemp;
+    if (currentTargetTemp < 15) {
+      thresholdCharacteristic.updateValue(15);
+    }
+
+    thresholdCharacteristic
+      .setProps({ minValue: 15, maxValue: 30, minStep: 1 })
+      .onGet(this.getTargetTemperature.bind(this))
+      .onSet(this.setTargetTemperature.bind(this));
+  }
+
+  async getActive(): Promise<CharacteristicValue> {
+    const subDevice = this.accessory.context.subDevice;
+    return subDevice.deviceStatus === 1
+      ? this.platform.Characteristic.Active.ACTIVE
+      : this.platform.Characteristic.Active.INACTIVE;
+  }
+
+  async getCurrentState(): Promise<CharacteristicValue> {
+    const subDevice = this.accessory.context.subDevice;
+    return subDevice.deviceStatus === 1
+      ? this.platform.Characteristic.CurrentHeaterCoolerState.COOLING
+      : this.platform.Characteristic.CurrentHeaterCoolerState.INACTIVE;
+  }
+
+  async getTargetState(): Promise<CharacteristicValue> {
+    return this.platform.Characteristic.TargetHeaterCoolerState.COOL;
+  }
+
+  async getCurrentTemperature(): Promise<CharacteristicValue> {
+    const subDevice = this.accessory.context.subDevice;
+    return subDevice.currentTemp;
+  }
+
+  async getTargetTemperature(): Promise<CharacteristicValue>  {
+    const subDevice = this.accessory.context.subDevice;
+    const targetTemp = subDevice.setTemp;
+
+    if (targetTemp < 15) {
+      return 15;
+    }
+    return targetTemp;
+  }
+
+  async setActive(value: CharacteristicValue) {
+    const device = this.accessory.context.device;
+    const subDevice = this.accessory.context.subDevice;
+    const state = value === this.platform.Characteristic.Active.ACTIVE ? 'ON' : 'OFF';
+    const success = await this.platform.shomeClient.setDevice(device.thngId, subDevice.deviceId.toString(), 'AIRCON', 'ON_OFF', state, subDevice.nickname);
+
+    if (success) {
+      this.accessory.context.subDevice.deviceStatus = value === this.platform.Characteristic.Active.ACTIVE ? 1 : 0;
+    } else {
+      throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
+    }
+  }
+
+  async setTargetState() {
+    // This function does not require separate processing as it only accepts HEAT values due to setProps.
+  }
+
+  async setTargetTemperature(value: CharacteristicValue) {
+    const device = this.accessory.context.device;
+    const subDevice = this.accessory.context.subDevice;
+
+    const success = await this.platform.shomeClient.setDevice(
+      device.thngId,
+      subDevice.deviceId.toString(),
+      'AIRCON',
+      'TEMPERATURE',
+      value.toString(),
+      subDevice.nickname);
+
+    if (success) {
+      this.accessory.context.subDevice.setTemp = value as number;
+    } else {
+      throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
+    }
+  }
+
+  updateState(newSubDevice: SubDevice) {
+    const oldSubDevice = this.accessory.context.subDevice;
+    if (oldSubDevice.deviceStatus !== newSubDevice.deviceStatus) {
+      this.platform.log.info(`Updating state for ${this.accessory.displayName}: ${newSubDevice.deviceStatus ? 'ON' : 'OFF'}`);
+      this.service.updateCharacteristic(this.platform.Characteristic.Active, newSubDevice.deviceStatus === 1);
+    }
+    if (oldSubDevice.currentTemp !== newSubDevice.currentTemp) {
+      this.platform.log.info(`Updating current temperature for ${this.accessory.displayName}: ${newSubDevice.currentTemp}`);
+      this.service.updateCharacteristic(this.platform.Characteristic.CurrentTemperature, newSubDevice.currentTemp as number);
+    }
+    if (oldSubDevice.setTemp !== newSubDevice.setTemp) {
+      const newTemp = (newSubDevice.setTemp as number) < 15 ? 15 : (newSubDevice.setTemp as number);
+      this.platform.log.info(`Updating target temperature for ${this.accessory.displayName}: ${newTemp}`);
+      this.service.updateCharacteristic(this.platform.Characteristic.HeatingThresholdTemperature, newTemp);
+    }
+    this.accessory.context.subDevice = newSubDevice;
+  }
+}
